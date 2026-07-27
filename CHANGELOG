@@ -3,6 +3,7 @@ Akeeba Release System 7.5.0
 ================================================================================
 + Rewritten Bleeding Edge releases
 + Support Joomla major releases past 4.x in plg_content_arslatest
++ Translations for German, Greek, Spanish, French, Italian and Portuguese
 ~ Joomla 7.0 readiness: use injected application in plg_editors-xtd_arslink instead of the removed CMSPlugin $app property
 ~ Modernise mod_arsdownloads to the module dispatcher / DI service provider pattern
 ~ Hardening: quote ORDER BY identifiers and whitelist the sort direction in list models
@@ -10,6 +11,7 @@ Akeeba Release System 7.5.0
 ~ Hardening: require core.manage on the JSON:API read endpoints so unprivileged token holders cannot enumerate access-restricted downloads
 ~ Hardening: enforce per-category create/edit permissions on the JSON:API write endpoints
 ~ Hardening: gate the control panel housekeeping task behind core.manage
+- The "Colorise changelog" option; the rewritten Bleeding Edge code no longer colourises the generated changelog
 
 Akeeba Release System 7.4.3
 ================================================================================

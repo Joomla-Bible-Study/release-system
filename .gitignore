@@ -14,7 +14,11 @@
 
 # Composer
 /vendor
+/component/backend/vendor
 
 # phpStorm HTTP Client private config file
 http-client.private.env.json
 .idea/laravel-idea.xml
+
+# macOS
+.DS_Store
