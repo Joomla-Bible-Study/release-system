@@ -1,23 +1,13 @@
 <?php die(); ?>
-Akeeba Release System 7.5.0
+Akeeba Release System 7.5.1
 ================================================================================
-+ Rewritten Bleeding Edge releases
-+ Support Joomla major releases past 4.x in plg_content_arslatest
 + Support for the Joomla 6.2 security flag in update streams (gh-250)
-+ Translations for German, Greek, Spanish, French, Italian and Portuguese
 ~ Replaced the Copy toolbar button with a Save as Copy button in the edit pages of Categories, Update Streams, Automatic Item Descriptions, and Environments
 ~ Added the Save as Copy button to the Releases edit page, auto-incrementing a colliding version and alias
-~ Joomla 7.0 readiness: use injected application in plg_editors-xtd_arslink instead of the removed CMSPlugin $app property
 ~ Joomla 7.0 readiness: replace the deprecated Table::getDbo() with getDatabase() throughout the Table classes
-~ Modernise mod_arsdownloads to the module dispatcher / DI service provider pattern
-~ Hardening: quote ORDER BY identifiers and whitelist the sort direction in list models
-~ Hardening: bind the tag filter IN() list in the Categories and Releases models
-~ Hardening: require core.manage on the JSON:API read endpoints so unprivileged token holders cannot enumerate access-restricted downloads
-~ Hardening: enforce per-category create/edit permissions on the JSON:API write endpoints
-~ Hardening: gate the control panel housekeeping task behind core.manage
 ~ Hardening: reject guests and enforce record ownership on the frontend Download ID edit view
 ~ Hardening: reject return URLs containing control characters
-- The "Colorise changelog" option; the rewritten Bleeding Edge code no longer colourises the generated changelog
+- CWM: the package no longer registers Akeeba's update site, so Joomla cannot offer an official release over a build made from this repository
 # [HIGH] Fatal error the first time the control panel is opened, on any site which does not have Akeeba Backup installed
 # [HIGH] Resumable and partial downloads served corrupt data: an error page fragment was appended to the response body
 # [HIGH] Update streams returned an error page whenever a Download ID was included in the request
@@ -30,11 +20,26 @@ Akeeba Release System 7.5.0
 # [MEDIUM] The Latest view returns an error page when no release is visible to the current user
 # [MEDIUM] The Categories view returns an error page when the URL has no layout parameter
 # [MEDIUM] Filtering the backend Categories or Releases list by two or more tags returned an error page, which kept recurring on that list for the rest of the session
+# [MEDIUM] LegacyObjectTrait::normalizePossibleCMSObject() guarded its unwrap on a condition that is always false once Joomla drops CMSObject, then fataled on any plain object (gh-348)
 # [LOW] Two items in the same release could be saved with the same alias
 # [LOW] Update streams with "liar mode" enabled never advertised minor version 10 of a Joomla major version
 # [LOW] A corrupt stored file hash produced an empty, invalid Content-Digest header on downloads
 # [LOW] The Item edit page used the Release page title, and always showed "Add" and "Cancel" even when editing an existing item
 # [LOW] The cache cleaner ignored the Joomla application configuration when it could not reach the application object
+
+Akeeba Release System 7.5.0
+================================================================================
++ Rewritten Bleeding Edge releases
++ Support Joomla major releases past 4.x in plg_content_arslatest
++ Translations for German, Greek, Spanish, French, Italian and Portuguese
+~ Joomla 7.0 readiness: use injected application in plg_editors-xtd_arslink instead of the removed CMSPlugin $app property
+~ Modernise mod_arsdownloads to the module dispatcher / DI service provider pattern
+~ Hardening: quote ORDER BY identifiers and whitelist the sort direction in list models
+~ Hardening: bind the tag filter IN() list in the Categories and Releases models
+~ Hardening: require core.manage on the JSON:API read endpoints so unprivileged token holders cannot enumerate access-restricted downloads
+~ Hardening: enforce per-category create/edit permissions on the JSON:API write endpoints
+~ Hardening: gate the control panel housekeeping task behind core.manage
+- The "Colorise changelog" option; the rewritten Bleeding Edge code no longer colourises the generated changelog
 
 Akeeba Release System 7.4.3
 ================================================================================
