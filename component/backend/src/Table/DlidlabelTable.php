@@ -70,12 +70,15 @@ class DlidlabelTable extends AbstractTable
 		// If no user_id is selected use the current user's ID.
 		$this->user_id = $this->user_id ?: Factory::getApplication()->getIdentity()?->id;
 
+		// A Download ID always belongs to a real user record; guests (user ID 0) need not apply.
+		$this->assertNotEmpty($this->user_id, 'JERROR_ALERTNOAUTHOR');
+
 		// Make sure the user_id points to a valid user record
 		$user = Factory::getContainer()->get(UserFactoryInterface::class)->loadUserById($this->user_id);
 		$this->assert($this->user_id == $user->id, '');
 
 		// Decide if this is a primary or secondary Download ID, overriding the user's selection if necessary.
-		$db    = $this->getDbo();
+		$db    = $this->getDatabase();
 		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
 			->select('COUNT(*)')
 			->from($db->qn('#__ars_dlidlabels'))

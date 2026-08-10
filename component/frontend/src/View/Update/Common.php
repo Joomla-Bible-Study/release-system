@@ -12,6 +12,7 @@ use Akeeba\Component\Compatibility\Administrator\Extension\CompatibiltyComponent
 use Joomla\CMS\Application\SiteApplication;
 use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Factory;
+use Joomla\CMS\MVC\Factory\MVCFactoryServiceInterface;
 use Joomla\CMS\Router\Route;
 use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\Version;
@@ -35,19 +36,35 @@ trait Common
 		// Set up the download ID request suffix
 		$this->dlidRequest = '';
 		$input             = Factory::getapplication()->getInput();
-		$dlid              = trim($input->getCmd('dlid', ''));
+		// Note: CMD would eat the colon of the `userId:downloadId` format used by secondary Download IDs.
+		$dlid              = trim($input->getString('dlid', ''));
 
 		if (!empty($dlid))
 		{
-			/** @var ItemModel $itemModel */
-			$itemModel = $this->getModel('item');
-			$dlid      = $itemModel->reformatDownloadID($dlid);
+			$dlid = $this->getItemModel()->reformatDownloadID($dlid);
 		}
 
 		if (!empty($dlid))
 		{
 			$this->dlidRequest = '&dlid=' . $dlid;
 		}
+	}
+
+	/**
+	 * Returns the front-end Item model.
+	 *
+	 * The Update controller never pushes an Item model into its views, so `getModel('item')` cannot
+	 * resolve one; it returns NULL, and calling a method on it is fatal. Therefore we create the model
+	 * through the component's MVC factory instead.
+	 *
+	 * @return  ItemModel
+	 */
+	private function getItemModel(): ItemModel
+	{
+		/** @var MVCFactoryServiceInterface $component */
+		$component = Factory::getApplication()->bootComponent('com_ars');
+
+		return $component->getMVCFactory()->createModel('Item', 'Site', ['ignore_request' => true]);
 	}
 
 	/**
@@ -248,7 +265,30 @@ trait Common
 
 			// Merge the real and pretend platforms, only keeping the unique items
 			$parsedPlatforms['platforms'] = array_merge($parsedPlatforms['platforms'], $morePlatforms);
-			$parsedPlatforms['platforms'] = array_unique($parsedPlatforms['platforms'], SORT_REGULAR);
+
+			/**
+			 * array_unique() with SORT_REGULAR compares the two-element [$name, $version] arrays with loose `==`,
+			 * which for numeric-looking version strings falls back to a numeric comparison. That makes '5.1' and
+			 * '5.10' compare as equal (both cast to float 5.1) and silently drops minor version 10. Deduplicate
+			 * explicitly by string key instead, keeping the first occurrence of each unique platform/version pair.
+			 */
+			$seen        = [];
+			$uniquePlats = [];
+
+			foreach ($parsedPlatforms['platforms'] as $platformItem)
+			{
+				$key = $platformItem[0] . '/' . $platformItem[1];
+
+				if (isset($seen[$key]))
+				{
+					continue;
+				}
+
+				$seen[$key]    = true;
+				$uniquePlats[] = $platformItem;
+			}
+
+			$parsedPlatforms['platforms'] = $uniquePlats;
 		}
 
 		if (!$compact)
