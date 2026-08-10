@@ -45,9 +45,21 @@
 
     <scriptfile>script.ars.php</scriptfile>
 
-    <updateservers>
-        <server type="extension" priority="1" name="Akeeba Release System Updates">
-            http://cdn.akeeba.com/updates/ars.xml
-        </server>
-    </updateservers>
+    <!--
+        CWM: the upstream <updateservers> block pointing at http://cdn.akeeba.com/updates/ars.xml
+        is deliberately removed.
+
+        We build and install ARS ourselves from Joomla-Bible-Study/release-system, carrying local
+        commits on top of upstream. Leaving the update site registered means Joomla offers Akeeba's
+        official releases in the Extensions updater, and accepting one silently overwrites our
+        build. Upstream also documents ARS as an internal project with no support, no semver, and
+        no guarantee a feature survives the next minor release, so we pin instead of tracking.
+
+        Update ARS by installing our own package. Do not restore this block without also deciding
+        how the pinned build is protected.
+
+        Note: removing this from the manifest stops NEW installs registering the update site; it
+        does not necessarily delete an already-registered row from #__update_sites. Check
+        System -> Update Sites on each site and disable "Akeeba Release System Updates" there too.
+    -->
 </extension>
