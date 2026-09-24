@@ -21,6 +21,7 @@ Akeeba Release System 7.5.2
 
 Akeeba Release System 7.5.1
 ================================================================================
+! SECURITY: Download ID disclosure
 + Support for the Joomla 6.2 security flag in update streams (gh-250)
 ~ Replaced the Copy toolbar button with a Save as Copy button in the edit pages of Categories, Update Streams, Automatic Item Descriptions, and Environments
 ~ Added the Save as Copy button to the Releases edit page, auto-incrementing a colliding version and alias
@@ -49,7 +50,6 @@ Akeeba Release System 7.5.1
 
 Akeeba Release System 7.5.0
 ================================================================================
-! SECURITY: Download ID disclosure
 + Rewritten Bleeding Edge releases
 + Support Joomla major releases past 4.x in plg_content_arslatest
 + Translations for German, Greek, Spanish, French, Italian and Portuguese
