@@ -8,7 +8,7 @@
 <extension type="module" client="administrator" method="upgrade">
     <name>MOD_ARSGRAPH</name>
     <author>Nicholas K. Dionysopoulos</author>
-    <creationDate>2026-07-27</creationDate>
+    <creationDate>2026-08-24</creationDate>
     <copyright>Copyright (c)2010-2024 Nicholas K. Dionysopoulos / Akeeba Ltd</copyright>
     <license>GNU GPL v3 or later</license>
     <authorEmail>nicholas@akeeba.com</authorEmail>

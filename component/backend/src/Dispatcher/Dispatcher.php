@@ -9,6 +9,7 @@ namespace Akeeba\Component\ARS\Administrator\Dispatcher;
 
 defined('_JEXEC') || die;
 
+use Akeeba\Component\ARS\Administrator\Helper\VersionLimits;
 use Akeeba\Component\ARS\Administrator\Mixin\TriggerEventTrait;
 use Joomla\CMS\Application\CMSApplication;
 use Joomla\CMS\Dispatcher\ComponentDispatcher;
@@ -28,40 +29,15 @@ class Dispatcher extends ComponentDispatcher
 
 	public function dispatch()
 	{
-		try
-		{
-			// Check the minimum supported PHP version
-			$minPHPVersion = '8.0.0';
-			$softwareName  = 'Akeeba Release System';
+		// Check the supported PHP and Joomla version limits
+		VersionLimits::throwIfVersionsIncompatible();
 
-			if (version_compare(PHP_VERSION, $minPHPVersion, 'lt'))
-			{
-				throw new \RuntimeException(
-					sprintf(
-						'%s requires PHP %s or later.',
-						$softwareName,
-						$minPHPVersion
-					)
-				);
-			}
+		$this->triggerEvent('onBeforeDispatch');
 
-			$this->triggerEvent('onBeforeDispatch');
+		parent::dispatch();
 
-			parent::dispatch();
-
-			// This will only execute if there is no redirection set by the Controller
-			$this->triggerEvent('onAfterDispatch');
-		}
-		catch (Throwable $e)
-		{
-			$title = 'Akeeba Release System';
-			$isPro = false;
-
-			if (!(include_once JPATH_ADMINISTRATOR . '/components/com_ars/tmpl/common/errorhandler.php'))
-			{
-				throw $e;
-			}
-		}
+		// This will only execute if there is no redirection set by the Controller
+		$this->triggerEvent('onAfterDispatch');
 	}
 
 	protected function onBeforeDispatch()
@@ -103,12 +79,8 @@ class Dispatcher extends ComponentDispatcher
 
 		// Finally, load our 'common' preset
 		$document->getWebAssetManager()
-			->usePreset('com_ars.backend');
-
-		if (version_compare(JVERSION, '4.99999.99999', 'gt')) {
-			$document->getWebAssetManager()
-				->useStyle('com_ars.j5');
-		}
+			->usePreset('com_ars.backend')
+			->useStyle('com_ars.j5');
 	}
 
 	protected function applyViewAndController(): void

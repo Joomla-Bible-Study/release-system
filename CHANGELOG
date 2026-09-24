@@ -1,4 +1,24 @@
 <?php die(); ?>
+Akeeba Release System 7.5.2
+================================================================================
+! PHP and Joomla minimum and maximum version compatibility is now enforced
+- Removed legacy error handler
++ JSON API routes for Automatic Item Descriptions, Download ID labels, Environments, and Update Streams
++ JSON API: many more list filters, and sorting with list_ordering / list_direction, on every endpoint
++ Documented the whole JSON:API in assets/http/api.http
+~ Hardening: authorise JSON:API deletions against the record's own category, not just the component
+~ Hardening: the JSON:API only shows a user other people's Download IDs if they may manage the component
+~ Errors thrown by custom upgrade handlers are now reported when Joomla's Debug Site setting is on
+~ Removed the redundant UCM record back-fill; Joomla 5.4 and later create UCM records on demand when a record is tagged
+~ Removed dead Joomla 4 compatibility code, unreachable since the minimum supported version became Joomla 5.4
+~ Joomla 7.0 readiness: dropped the unreachable CMSObject fallback from plg_editors-xtd_arslink
+~ Joomla 7.0 readiness: dropped the unreachable Toolbar::getInstance() fallback from the backend views
+~ Build every query through Helper\DbQuery::create(), so the createQuery() compatibility branch lives in one place instead of seventy
+# [MEDIUM] Bleeding Edge scans never ran for a newly created category, because its first-scan check compared identical creation and modification timestamps
+# [MEDIUM] Releases could be saved without a created-by user association
+# [LOW] PHP Warning on inaccessible item [gh-251]
+# [LOW] Upgrading left obsolete folders behind on Windows, macOS, and other case-insensitive filesystems
+
 Akeeba Release System 7.5.1
 ================================================================================
 + Support for the Joomla 6.2 security flag in update streams (gh-250)
@@ -29,6 +49,7 @@ Akeeba Release System 7.5.1
 
 Akeeba Release System 7.5.0
 ================================================================================
+! SECURITY: Download ID disclosure
 + Rewritten Bleeding Edge releases
 + Support Joomla major releases past 4.x in plg_content_arslatest
 + Translations for German, Greek, Spanish, French, Italian and Portuguese

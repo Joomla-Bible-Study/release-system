@@ -47,7 +47,7 @@ class CategoriesController extends ApiController
 			['language', 'filter.language', 'string'],
 		];
 
-		$this->populateModelState($stateMapper);
+		$this->populateListModelState($stateMapper);
 
 		return parent::displayList();
 	}
@@ -61,7 +61,12 @@ class CategoriesController extends ApiController
 
 	public function delete($id = null)
 	{
-		$this->assertCanManage();
+		if ($id === null) {
+			$id = $this->input->get('id', 0, 'int');
+		}
+
+		// A category is its own asset, so its own permissions decide whether it may be deleted.
+		$this->assertCanDelete((int) $id);
 
 		return parent::delete($id);
 	}

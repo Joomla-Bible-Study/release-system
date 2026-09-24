@@ -9,6 +9,7 @@ namespace Akeeba\Component\ARS\Site\Model;
 
 defined('_JEXEC') or die;
 
+use Akeeba\Component\ARS\Administrator\Helper\DbQuery;
 use Akeeba\Component\ARS\Administrator\Mixin\RunPluginsTrait;
 use Akeeba\Component\ARS\Administrator\Table\CategoryTable;
 use Akeeba\Component\ARS\Administrator\Table\ItemTable;
@@ -66,8 +67,12 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		$this->removeReleasesByCount($category);
 
 		// Skip the expensive scan if the directory hasn't been touched since the category was last scanned.
+		// `modified` doubles as "last scanned" here (see below); a NULL `modified` means this category
+		// has never been scanned yet, so it must NOT fall back to `created` — that would make a
+		// brand-new category look already-scanned and could permanently skip its first scan if the
+		// release directory was uploaded before the category was created (the normal workflow order).
 		$dirMTime = @filemtime($path) ?: 0;
-		$lastSeen = $category->modified ?: $category->created;
+		$lastSeen = $category->modified;
 
 		try
 		{
@@ -226,7 +231,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		$dateString       = $targetDateJoomla->toSql(false, $db);
 		$catId            = $category->id;
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 		$query->select(
 			[
 				$db->quoteName('id'),
@@ -290,7 +295,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		$db    = $this->getDatabase();
 		$catId = $category->id;
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 
 		$query->select(
 			[
@@ -686,7 +691,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		$catId = $categoryTable->id;
 		$db    = $this->getDatabase();
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 		$query->select(
 			[
 				$db->quoteName('id'),
@@ -728,7 +733,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		$catId = $categoryTable->id;
 		$db    = $this->getDatabase();
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 		$query->select(
 			[
 				$db->quoteName('id'),
@@ -768,7 +773,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		$db = $this->getDatabase();
 
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 		$query->update($db->quoteName('#__ars_releases'))
 			->set($db->quoteName('published') . ' = 0')
 			->whereIn($db->quoteName('id'), $releaseIDs, ParameterType::INTEGER);
@@ -783,7 +788,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		}
 
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 		$query->update($db->quoteName('#__ars_items'))
 			->set($db->quoteName('published') . ' = 0')
 			->whereIn($db->quoteName('release_id'), $releaseIDs, ParameterType::INTEGER);
@@ -1002,7 +1007,7 @@ final class BleedingedgeModel extends BaseDatabaseModel
 
 		// Get all the items in the release
 		/** @var QueryInterface $query */
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true));
+		$query = DbQuery::create($db);
 		$query->select(
 			[
 				$db->quoteName('id'),

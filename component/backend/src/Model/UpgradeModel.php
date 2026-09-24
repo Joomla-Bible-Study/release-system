@@ -9,9 +9,11 @@ namespace Akeeba\Component\ARS\Administrator\Model;
 
 defined('_JEXEC') or die;
 
+use Akeeba\Component\ARS\Administrator\Helper\DbQuery;
 use DirectoryIterator;
 use Joomla\Filesystem\File;
 use Joomla\Filesystem\Folder;
+use Joomla\CMS\Factory;
 use Joomla\CMS\Installer\Adapter\PackageAdapter;
 use Joomla\CMS\Installer\Installer;
 use Joomla\CMS\MVC\Model\BaseModel;
@@ -117,6 +119,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 
 			JPATH_ADMINISTRATOR . '/components/com_ars/tmpl/common/phpversion_warning.php',
 			JPATH_ADMINISTRATOR . '/components/com_ars/tmpl/common/wrongphp.php',
+			JPATH_ADMINISTRATOR . '/components/com_ars/tmpl/common/errorhandler.php',
 		],
 		'folders' => [
 			JPATH_ADMINISTRATOR . '/components/com_ars/sql/xml',
@@ -274,7 +277,10 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 			}
 			catch (Throwable $e)
 			{
-				// Well, this failed. Let's move on to the next one.
+				if (defined('JDEBUG') && JDEBUG)
+				{
+					Factory::getApplication()->enqueueMessage($e->getMessage());
+				}
 			}
 		}
 
@@ -307,7 +313,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		}
 
 		$db    = $this->getDatabase();
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->select($db->quoteName('extension_id'))
 			->from($db->quoteName('#__extensions'));
 
@@ -379,7 +385,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 
 		// Reassign all extensions
 		$db    = $this->getDatabase();
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->update($db->quoteName('#__extensions'))
 			->set($db->qn('package_id') . ' = :package_id')
 			->whereIn($db->qn('extension_id'), $extensionIDs, ParameterType::INTEGER)
@@ -450,7 +456,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		}
 
 		$db    = $this->getDatabase();
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->update($db->quoteName('#__extensions'))
 			->set($db->qn('enabled') . ' = 1')
 			->whereIn($db->quoteName('extension_id'), $extensionIDs);
@@ -477,7 +483,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 	{
 		// We will definitely remove REMOVE_FROM_ALL_VERSIONS in all versions
 		$removeSource = self::REMOVE_FROM_ALL_VERSIONS;
-		$isPro        = $isPro ?? $this->isPro();
+		$isPro        = $this->isPro();
 
 		if (!$isPro)
 		{
@@ -506,11 +512,6 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		// Remove folders
 		foreach ($removeSource['folders'] as $folder)
 		{
-			if (!is_dir($folder))
-			{
-				continue;
-			}
-
 			$this->deleteFolder($folder);
 		}
 	}
@@ -598,12 +599,21 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		}
 
 		/**
-		 * The two folders are identical.
+		 * The two folders are identical: we are on a case-insensitive filesystem, and $path and $altPath are two
+		 * spellings of one directory. The probe above proves it — a file written through $altPath was read back
+		 * through $path — so deleting it removes exactly the folder we were asked to remove, and nothing else.
 		 *
-		 * It is impossible to know if the folder is written on disk as lowercase or mixed case. We must rename it to
-		 * all lowercase. If we don't, moving the site to a case-sensitive filesystem will break it (the folder will be
-		 * in the wrong case!). Therefore we have to do a two-step process to effect the rename on a case-insensitive
-		 * filesystem...
+		 * We cannot simply delete $path, because we do not know how the entry is actually spelled on disk, and
+		 * deleting through the wrong spelling is what the original Windows breakage was about. So we first rename
+		 * the folder to a name we chose ourselves, whose spelling is therefore known exactly, and delete that.
+		 *
+		 * The rename is two-step because renaming Foo to foo is a no-op (or an error) on a case-insensitive
+		 * filesystem: the source and destination are the same entry. Going through a uniquely named intermediate
+		 * avoids that collision.
+		 *
+		 * If the deletion fails we still land the folder on its all-lowercase name rather than leaving it under the
+		 * intermediate one, so that a failure here leaves the tree tidy — and correctly cased, which matters if the
+		 * site is later moved to a case-sensitive filesystem.
 		 */
 		$intermediateBasename = $lowercaseBaseName . '_' . UserHelper::genRandomPassword(8);
 		$intermediatePath     = dirname($path) . '/' . $intermediateBasename;
@@ -611,11 +621,38 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		try
 		{
 			Folder::move($path, $intermediatePath);
+		}
+		catch (\Exception $e)
+		{
+			// Swallow; the is_dir() check below is what actually decides whether the rename landed.
+		}
+
+		/**
+		 * Folder::move() reports failure by RETURNING a string ('Rename failed', 'Folder already exists', …) rather
+		 * than throwing, so the catch above cannot be relied upon. Check the filesystem instead: if the folder is not
+		 * where we just tried to put it, the rename did not happen and there is nothing safe to delete.
+		 */
+		if (!is_dir($intermediatePath))
+		{
+			return false;
+		}
+
+		try
+		{
+			return Folder::delete($intermediatePath);
+		}
+		catch (\Exception $e)
+		{
+			// Deletion failed. Fall through and at least leave the folder correctly cased.
+		}
+
+		try
+		{
 			Folder::move($intermediatePath, $altPath);
 		}
 		catch (\Exception $e)
 		{
-			return false;
+			// Swallow: nothing further we can do.
 		}
 
 		return false;
@@ -734,7 +771,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 
 		// Reassign all extensions
 		$db    = $this->getDatabase();
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->update($db->quoteName('#__extensions'))
 			->set($db->qn('package_id') . ' = :package_id')
 			->whereIn($db->qn('extension_id'), $extensionIDs, ParameterType::INTEGER)
@@ -765,7 +802,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		// Get the existing list of extensions dependent on the specified version of FOF.
 		$keyName = 'fof' . $fofVersion . '0';
 		$db      = $this->getDatabase();
-		$query   = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query   = DbQuery::create($db)
 			->select($db->quoteName('value'))
 			->from($db->quoteName('#__akeeba_common'))
 			->where($db->quoteName('key') . ' = :keyName')
@@ -791,7 +828,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		$json = json_encode($list);
 
 		// Update the #__akeeba_common table.
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->update($db->quoteName('#__akeeba_common'))
 			->set($db->quoteName('value') . ' = :json')
 			->where($db->quoteName('key') . ' = :keyName')
@@ -852,14 +889,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 		$filePath = $this->getCachedManifestPath($oldPackage);
 		$contents = $xml->asXML();
 
-		try
-		{
-			File::write($filePath, $contents);
-		}
-		catch (\Exception $e)
-		{
-			// Swallow.
-		}
+		@file_put_contents($filePath, $contents);
 	}
 
 	/**
@@ -941,12 +971,12 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 				break;
 
 			case 'plugin':
-				$group     = (string) $fileField->attributes()->group ?? 'system';
+				$group     = (string) ($fileField->attributes()->group ?? '') ?: 'system';
 				$extension = 'plg_' . $group . '_' . $id;
 				break;
 
 			case 'module':
-				$client    = (string) $fileField->attributes()->client ?? 'site';
+				$client    = (string) ($fileField->attributes()->client ?? '') ?: 'site';
 				$extension = (($client != 'site') ? 'a' : '') . $id;
 				break;
 
@@ -1249,7 +1279,7 @@ class UpgradeModel extends BaseModel implements DatabaseAwareInterface
 	private function removeExtensionPackageLink(int $eid): void
 	{
 		$db    = $this->getDatabase();
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->update($db->quoteName('#__extensions'))
 			->set($db->quoteName('package_id') . ' = 0')
 			->where($db->quoteName('extension_id') . ' = :eid')

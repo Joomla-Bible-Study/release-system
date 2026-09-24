@@ -14,6 +14,7 @@ use Joomla\CMS\Factory;
 use Joomla\CMS\Installer\Adapter\PackageAdapter;
 use Joomla\CMS\Installer\InstallerAdapter;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\Log\Log;
 use Joomla\Database\DatabaseDriver;
 use Joomla\Database\DatabaseInterface;
 use Joomla\Database\ParameterType;
@@ -34,9 +35,68 @@ class Pkg_ArsInstallerScript extends \Joomla\CMS\Installer\InstallerScript
 
 	protected $allowDowngrades = true;
 
-	protected $minimumPhp = '8.0.0';
+	protected $minimumPhp = '8.1.0';
 
-	protected $minimumJoomla = '4.3.0';
+	protected $maximumPhp = '8.7';
+
+	protected $minimumJoomla = '5.4.0';
+
+	protected $maximumJoomla = '6.3';
+
+	/**
+	 * Called before any type of installation / uninstallation action.
+	 *
+	 * Joomla only enforces the minimum PHP and Joomla version for us. The maximum versions are enforced here.
+	 *
+	 * @param   string          $type    Which action is happening (install|uninstall|discover_install|update)
+	 * @param   PackageAdapter  $parent  The object responsible for running this script
+	 *
+	 * @return  bool
+	 * @since   7.5.0
+	 */
+	public function preflight($type, $parent)
+	{
+		if (!parent::preflight($type, $parent))
+		{
+			return false;
+		}
+
+		// Check for the maximum PHP version before continuing
+		$maxPhp = !empty($this->maximumPhp) ? trim($this->maximumPhp) : null;
+
+		if (!empty($maxPhp) && version_compare(PHP_VERSION, $maxPhp, 'ge'))
+		{
+			Log::add(
+				sprintf(
+					'This extension supports PHP versions lower than %s. Your server has a newer PHP version (%s) which has not been tested with it. The installation cannot proceed.',
+					$maxPhp, PHP_VERSION
+				),
+				Log::WARNING,
+				'jerror'
+			);
+
+			return false;
+		}
+
+		// Check for the maximum Joomla version before continuing
+		$maxJoomla = !empty($this->maximumJoomla) ? trim($this->maximumJoomla) : null;
+
+		if (!empty($maxJoomla) && version_compare(JVERSION, $maxJoomla, 'ge'))
+		{
+			Log::add(
+				sprintf(
+					'This extension supports Joomla! versions lower than %s. Your site has a newer Joomla! version (%s) which has not been tested with it. The installation cannot proceed.',
+					$maxJoomla, JVERSION
+				),
+				Log::WARNING,
+				'jerror'
+			);
+
+			return false;
+		}
+
+		return true;
+	}
 
 	/**
 	 * Called after any type of installation / uninstallation action.
@@ -209,14 +269,7 @@ class Pkg_ArsInstallerScript extends \Joomla\CMS\Installer\InstallerScript
 			return null;
 		}
 
-		if (method_exists($upgradeModel, 'setDatabase'))
-		{
-			$upgradeModel->setDatabase($this->dbo ?? Factory::getContainer()->get(DatabaseInterface::class));
-		}
-		elseif (method_exists($upgradeModel, 'setDbo'))
-		{
-			$upgradeModel->setDbo($this->dbo ?? Factory::getContainer()->get(DatabaseInterface::class));
-		}
+		$upgradeModel->setDatabase($this->dbo ?? Factory::getContainer()->get(DatabaseInterface::class));
 
 		if (method_exists($upgradeModel, 'init'))
 		{
@@ -239,6 +292,8 @@ class Pkg_ArsInstallerScript extends \Joomla\CMS\Installer\InstallerScript
 	{
 		$position = 'cpanel-' . $dashboard;
 		$db       = Factory::getContainer()->get(DatabaseInterface::class);
+		// Deliberately inline, not Helper\DbQuery: this script runs during installation, when the
+		// component's PSR-4 autoloader may not be registered yet. Keep in sync with that helper.
 		$query    = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
 		               ->select('COUNT(*)')
 		               ->from($db->quoteName('#__modules'))
@@ -298,6 +353,7 @@ class Pkg_ArsInstallerScript extends \Joomla\CMS\Installer\InstallerScript
 	private function removeOldUpdateSites()
 	{
 		$db    = $this->dbo;
+		// Deliberately inline — see the note above.
 		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
 			->delete($db->qn('#__update_sites'))
 			->where($db->qn('location') . ' = ' . $db->q('https://raw.githubusercontent.com/akeeba/release-system/master/update/pkg_ars_updates.xml'));

@@ -7,7 +7,7 @@
 
 <extension type="component" method="upgrade">
     <name>com_ars</name>
-    <creationDate>2026-07-27</creationDate>
+    <creationDate>2026-08-24</creationDate>
     <author>Akeeba Ltd</author>
     <authorEmail>no-reply@akeeba.com</authorEmail>
     <authorUrl>https://www.akeeba.com</authorUrl>

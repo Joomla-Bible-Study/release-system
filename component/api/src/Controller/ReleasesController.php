@@ -52,7 +52,7 @@ class ReleasesController extends ApiController
 			['latest', 'filter.latest', 'int'],
 		];
 
-		$this->populateModelState($stateMapper);
+		$this->populateListModelState($stateMapper);
 
 		return parent::displayList();
 	}
@@ -66,7 +66,13 @@ class ReleasesController extends ApiController
 
 	public function delete($id = null)
 	{
-		$this->assertCanManage();
+		if ($id === null) {
+			$id = $this->input->get('id', 0, 'int');
+		}
+
+		$release = $id ? $this->getModel('Release')->getItem((int) $id) : null;
+
+		$this->assertCanDelete($release ? (int) ($release->category_id ?? 0) : 0);
 
 		return parent::delete($id);
 	}

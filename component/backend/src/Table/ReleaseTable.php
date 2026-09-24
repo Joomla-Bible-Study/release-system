@@ -9,7 +9,7 @@ namespace Akeeba\Component\ARS\Administrator\Table;
 
 defined('_JEXEC') or die;
 
-use Akeeba\Component\ARS\Administrator\Mixin\EnsureUcmTrait;
+use Akeeba\Component\ARS\Administrator\Helper\DbQuery;
 use Akeeba\Component\ARS\Administrator\Mixin\TableAssertionTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\TableColumnAliasTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\TableCreateModifyTrait;
@@ -48,10 +48,12 @@ use Joomla\Event\Event;
 class ReleaseTable extends AbstractTable implements TaggableTableInterface
 {
 	use TaggableTableTrait;
-	use TableCreateModifyTrait;
+	use TableCreateModifyTrait
+	{
+		TableCreateModifyTrait::onBeforeStore as onBeforeStoreCreateModifyAware;
+	}
 	use TableAssertionTrait;
 	use TableColumnAliasTrait;
-	use EnsureUcmTrait;
 
 	/**
 	 * Used internally by Joomla! to manage tags.
@@ -176,33 +178,15 @@ class ReleaseTable extends AbstractTable implements TaggableTableInterface
 	}
 
 	/**
-	 * Runs after loading a record from the database
-	 *
-	 * @param   bool   $result  Did the record load?
-	 * @param   mixed  $keys    The keys used to load the record.
-	 * @param   bool   $reset   Was I asked to reset the object before loading the record?
-	 *
-	 * @return  void
-	 *
-	 * @since   7.4.0
-	 */
-	protected function onAfterLoad(bool &$result, $keys, bool $reset): void
-	{
-		// Make sure existing records have a UCM record
-		if (!$result || !empty($this->id))
-		{
-			$this->ensureUcmRecord();
-		}
-	}
-
-	/**
 	 * Part of the evil voodoo.
 	 *
 	 * @return  void
 	 * @see     self::voodooOnBeforeStore()
 	 */
-	protected function onBeforeStore()
+	protected function onBeforeStore(&$updateNulls = false)
 	{
+		$this->onBeforeStoreCreateModifyAware($updateNulls);
+
 		$this->_voodoo_category_id = 'VOODOO:' . (string) ($this->category_id ?? '');
 		$this->_voodoo_hash        = spl_object_hash($this);
 
@@ -220,7 +204,7 @@ class ReleaseTable extends AbstractTable implements TaggableTableInterface
 		unset ($this->_voodoo_category_id);
 		unset ($this->_voodoo_hash);
 
-		$this->getDispatcher()->removeListener('onTableAfterStore', [$this, 'voodooOnBeforeStore']);
+		$this->getDispatcher()->removeListener('onTableBeforeStore', [$this, 'voodooOnBeforeStore']);
 	}
 
 	protected function onBeforeCheck()
@@ -239,7 +223,7 @@ class ReleaseTable extends AbstractTable implements TaggableTableInterface
 
 		// Check alias for uniqueness
 		$db    = $this->getDatabase();
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+		$query = DbQuery::create($db)
 			->select(
 				[
 					$db->quoteName('alias'),
