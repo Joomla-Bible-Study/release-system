@@ -971,6 +971,9 @@ foreach ($releaseSpecs as $key => [$catKey, $version, $maturity, $security, $acc
 			'maturity'          => $maturity,
 			'security'          => $security,
 			'notes'             => '<p>E2E release notes for ' . $key . '.</p>',
+			// Only one release carries an explicit changelog URL, to prove both the override and the
+			// infoUrl fallback in the same fixture set.
+			'changelog_url'     => $key === 'publicSecurity' ? 'https://example.com/e2e-changelog/' . $key : '',
 			'hits'              => 0,
 			'created'           => $created,
 			'created_by'        => $users['manager'],

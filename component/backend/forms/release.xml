@@ -83,6 +83,14 @@
         />
 
         <field
+                name="changelog_url"
+                type="url"
+                label="COM_ARS_RELEASES_FIELD_CHANGELOG_URL"
+                description="COM_ARS_RELEASES_FIELD_CHANGELOG_URL_DESC"
+                validate="url"
+        />
+
+        <field
                 name="show_unauth_links"
                 type="list"
                 layout="joomla.form.field.radio.switcher"

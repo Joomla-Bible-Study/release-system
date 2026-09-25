@@ -179,6 +179,11 @@ class JsonView extends HtmlView
 							. $item->category,
 							false, Route::TLS_IGNORE, true
 						),
+						'changelogUrl'   => !empty($item->changelog_url) ? $item->changelog_url : Route::_(
+							'index.php?option=com_ars&view=items&release_id=' . $item->release_id . '&category_id='
+							. $item->category,
+							false, Route::TLS_IGNORE, true
+						),
 						'download'       => html_entity_decode($downloadUrl),
 						'releaseNotes'   => $item->release_notes,
 						'downloadFormat' => $format,

@@ -79,7 +79,7 @@ foreach ($this->items as $item)
 			true, Route::TLS_IGNORE, true
 		));
 		$infoUrl->addAttribute('title', sprintf('%s %s', $item->cat_title, $item->version));
-		$update->addChild('changelogurl', (string) $infoUrl);
+		$update->addChild('changelogurl', !empty($item->changelog_url) ? $item->changelog_url : (string) $infoUrl);
 
 		$downloads = $update->addChild('downloads');
 

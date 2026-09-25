@@ -31,6 +31,7 @@ use Joomla\Event\Event;
  * @property string $maturity          Release maturity: 'alpha','beta','rc','stable'
  * @property int    $security          Security severity: 0 none, 1 low, 2 medium, 3 high, 4 critical
  * @property string $notes             Release notes, displayed in frontend
+ * @property string $changelog_url     URL advertised as this release's changelog on update streams; falls back to the release's own info page when empty
  * @property string $hits              Hits (times displayed)
  * @property string $created           Created date and time
  * @property int    $created_by        Created by this user

@@ -268,8 +268,10 @@ class UpdateStreamTest extends AbstractE2ETestCase
 
 	/**
 	 * Every `<update>` element carries a `<changelogurl>`, otherwise Joomla's Extensions → Update screen
-	 * shows "N/A" in its Changelog column. We reuse `<infourl>` verbatim: that page already renders the
-	 * release notes, so it doubles as a changelog page without a new field on `#__ars_releases`.
+	 * shows "N/A" in its Changelog column. Releases fall back to `<infourl>` — that page already renders
+	 * the release notes, so it doubles as a changelog page — unless the release itself sets a
+	 * `changelog_url`, which is then advertised verbatim instead. The fixtures give exactly one release
+	 * (`publicSecurity`, identifiable by its `<security>` element) an explicit `changelog_url`.
 	 *
 	 * @return  void
 	 * @since   7.5.2
@@ -281,16 +283,88 @@ class UpdateStreamTest extends AbstractE2ETestCase
 
 		$this->assertGreaterThan(0, count($xml->update), 'The main stream has no <update> elements.');
 
+		$withExplicitUrl = 0;
+
 		foreach ($xml->update as $update)
 		{
 			$this->assertGreaterThan(0, count($update->changelogurl), 'An <update> element has no <changelogurl> element.');
 			$this->assertNotEmpty((string) $update->changelogurl, 'The <changelogurl> element is empty.');
+
+			if (count($update->security) > 0)
+			{
+				$withExplicitUrl++;
+				$this->assertSame(
+					'https://example.com/e2e-changelog/publicSecurity',
+					(string) $update->changelogurl,
+					'The publicSecurity release should advertise its own changelog_url, not <infourl>.'
+				);
+				$this->assertNotSame(
+					(string) $update->infourl,
+					(string) $update->changelogurl,
+					'The publicSecurity release changelogurl should differ from infourl.'
+				);
+
+				continue;
+			}
+
 			$this->assertSame(
 				(string) $update->infourl,
 				(string) $update->changelogurl,
-				'The <changelogurl> element should reuse the <infourl> value.'
+				'A release without its own changelog_url should fall back to <infourl>.'
 			);
 		}
+
+		$this->assertSame(1, $withExplicitUrl, 'Exactly one release (publicSecurity) should carry an explicit changelog_url.');
+	}
+
+	/**
+	 * The JSON flavour of the update stream (`JsonView::onBeforeJson()`) mirrors the XML stream's fields
+	 * by hand rather than reusing it, so the `changelogUrl` fallback/override logic needs the same
+	 * coverage applied separately.
+	 *
+	 * @return  void
+	 * @since   7.5.2
+	 */
+	public function testJsonOutputCarriesAChangelogUrl(): void
+	{
+		$response = $this->guest()->get($this->jsonStreamUrl('main'));
+		$items    = $response->json();
+
+		$this->assertIsArray($items, 'The JSON update stream did not return a JSON array.');
+		$this->assertGreaterThan(0, count($items), 'The JSON update stream has no items.');
+
+		$withExplicitUrl = 0;
+
+		foreach ($items as $item)
+		{
+			$this->assertArrayHasKey('changelogUrl', $item, 'A JSON update stream item has no changelogUrl key.');
+			$this->assertNotEmpty($item['changelogUrl'], 'The changelogUrl value is empty.');
+
+			if (array_key_exists('security', $item))
+			{
+				$withExplicitUrl++;
+				$this->assertSame(
+					'https://example.com/e2e-changelog/publicSecurity',
+					$item['changelogUrl'],
+					'The publicSecurity release should advertise its own changelog_url, not infoUrl.'
+				);
+				$this->assertNotSame(
+					$item['infoUrl'],
+					$item['changelogUrl'],
+					'The publicSecurity release changelogUrl should differ from infoUrl.'
+				);
+
+				continue;
+			}
+
+			$this->assertSame(
+				$item['infoUrl'],
+				$item['changelogUrl'],
+				'A release without its own changelog_url should fall back to infoUrl.'
+			);
+		}
+
+		$this->assertSame(1, $withExplicitUrl, 'Exactly one release (publicSecurity) should carry an explicit changelog_url.');
 	}
 
 	/**

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS `#__ars_releases` (
     `maturity`          ENUM ('alpha','beta','rc','stable') NOT NULL DEFAULT 'beta',
     `security`          TINYINT                             NOT NULL DEFAULT 0,
     `notes`             TEXT                                NULL,
+    `changelog_url`     VARCHAR(255)                        NULL     DEFAULT '',
     `hits`              BIGINT(20) UNSIGNED                 NOT NULL DEFAULT 0,
     `created`           datetime                            NULL     DEFAULT NULL,
     `created_by`        int(11)                             NOT NULL DEFAULT '0',

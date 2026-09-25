@@ -103,7 +103,8 @@ class UpdateModel extends BaseDatabaseModel
 				$db->quoteName('i.url'),
 				$db->quoteName('i.type', 'itemtype'),
 				$db->quoteName('r.created'),
-				$db->quoteName('r.notes', 'release_notes')
+				$db->quoteName('r.notes', 'release_notes'),
+				$db->quoteName('r.changelog_url')
 			))
 			->from($db->quoteName('#__ars_items', 'i'))
 			->innerJoin($db->quoteName('#__ars_releases', 'r'),

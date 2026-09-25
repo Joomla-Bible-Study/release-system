@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS "#__ars_releases"
     "maturity"          VARCHAR(20)  NOT NULL DEFAULT 'beta' CHECK ("maturity" IN ('alpha', 'beta', 'rc', 'stable')),
     "security"          SMALLINT     NOT NULL DEFAULT 0,
     "notes"             TEXT         NULL,
+    "changelog_url"     VARCHAR(255) NULL     DEFAULT '',
     "hits"              BIGINT       NOT NULL DEFAULT 0,
     "created"           TIMESTAMP    NULL     DEFAULT NULL,
     "created_by"        INTEGER      NOT NULL DEFAULT 0,
