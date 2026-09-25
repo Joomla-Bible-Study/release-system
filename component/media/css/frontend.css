@@ -10,10 +10,6 @@
  * @package   AkeebaReleaseSystem
  * @copyright Copyright (c)2010-2026 Nicholas K. Dionysopoulos / Akeeba Ltd
  * @license   GNU General Public License version 3, or later
- *//*!*
- * @package   AkeebaReleaseSystem
- * @copyright Copyright (c)2010-2026 Nicholas K. Dionysopoulos / Akeeba Ltd
- * @license   GNU General Public License version 3, or later
  */[class|=ars-devrelease-changelog]{color:#514f50}[class|=ars-devrelease-changelog][class$=added]{color:#93c34e;font-weight:bold}[class|=ars-devrelease-changelog][class$=removed]{color:#e2363c}[class|=ars-devrelease-changelog][class$=bugfix]{color:#40b5b8}[class|=ars-devrelease-changelog][class$=minor]{color:#898989;font-style:italic}[class|=ars-devrelease-changelog][class$=important]{color:#f0ad4e;font-weight:bold;font-style:italic}/*!*
  * @package   AkeebaReleaseSystem
  * @copyright Copyright (c)2010-2026 Nicholas K. Dionysopoulos / Akeeba Ltd
@@ -22,8 +18,5 @@
  * @package   AkeebaReleaseSystem
  * @copyright Copyright (c)2010-2026 Nicholas K. Dionysopoulos / Akeeba Ltd
  * @license   GNU General Public License version 3, or later
- *//*!*
- * @package   AkeebaReleaseSystem
- * @copyright Copyright (c)2010-2026 Nicholas K. Dionysopoulos / Akeeba Ltd
- * @license   GNU General Public License version 3, or later
- */@media(prefers-color-scheme: dark){[class|=ars-devrelease-changelog]{color:#efefef}[class|=ars-devrelease-changelog][class$=removed]{color:rgb(91.1491901108%,38.6547314578%,40.4859335038%)}[class|=ars-devrelease-changelog][class$=minor]{color:#bcbcbc}}/*# sourceMappingURL=frontend.css.map */
+ */@media(prefers-color-scheme: dark){[class|=ars-devrelease-changelog]{color:#efefef}[class|=ars-devrelease-changelog][class$=removed]{color:rgb(91.1491901108%,38.6547314578%,40.4859335038%)}[class|=ars-devrelease-changelog][class$=minor]{color:#bcbcbc}}
+/*# sourceMappingURL=frontend.css.map */

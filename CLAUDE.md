@@ -58,8 +58,10 @@ Packaging is `composer package` (`vendor/bin/cwm-package` from
 `cwm-build.config.json` at the repo root — not the upstream `buildfiles`/Phing pipeline (`build.xml`) this fork used
 to depend on. `cwm-package` zips whatever is currently committed; it does **not** recompile JavaScript or SCSS, so
 `component/media/js/*.min.js` and `component/media/css/*.css` must already be up to date with their sources before
-packaging — there is currently no cwm-build-tools-driven build step for that (see the tests/integration/docker
-gotcha below for the concrete gap this leaves in the e2e harness).
+packaging. Run `npm install && npm run build` (cwm-build-tools' `build-scss.js` / `minify-js.js` templates,
+`^1.37`) after editing anything under `component/media/css` or `component/media/js`, and commit the
+regenerated output — ARS commits its built assets rather than gitignoring them, unlike most cwm-build-tools
+consumers, so `SOURCE_DIR` and `OUTPUT_DIR` are the same directory for both.
 
 ## Deploy
 

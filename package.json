@@ -1,0 +1,19 @@
+{
+	"name": "com_ars",
+	"description": "Akeeba Release System - frontend asset build pipeline",
+	"license": "GPL-3.0-or-later",
+	"private": true,
+	"engines": {
+		"node": ">=24.0.0",
+		"npm": ">=11.0.0"
+	},
+	"devDependencies": {
+		"sass": "^1.105.0",
+		"terser": "^5.51.2"
+	},
+	"scripts": {
+		"build": "npm run build:css && npm run build:js",
+		"build:css": "SOURCE_DIR=component/media/css OUTPUT_DIR=component/media/css SOURCE_ROOT=./ node vendor/cwm/build-tools/templates/build-scss.js",
+		"build:js": "SOURCE_DIR=component/media/js OUTPUT_DIR=component/media/js SOURCE_ROOT=./ node vendor/cwm/build-tools/templates/minify-js.js"
+	}
+}

@@ -9,16 +9,16 @@
     "packages-dev": [
         {
             "name": "cwm/build-tools",
-            "version": "v1.36.0",
+            "version": "v1.37.0",
             "source": {
                 "type": "git",
-                "url": "git@github.com:Joomla-Bible-Study/cwm-build-tools.git",
-                "reference": "3d4fb49764af55cebe352c0177ebae6a4c890067"
+                "url": "https://github.com/Joomla-Bible-Study/cwm-build-tools.git",
+                "reference": "95f909f33f65be8d905f0757106bc301d24d1d60"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Joomla-Bible-Study/cwm-build-tools/zipball/3d4fb49764af55cebe352c0177ebae6a4c890067",
-                "reference": "3d4fb49764af55cebe352c0177ebae6a4c890067",
+                "url": "https://api.github.com/repos/Joomla-Bible-Study/cwm-build-tools/zipball/95f909f33f65be8d905f0757106bc301d24d1d60",
+                "reference": "95f909f33f65be8d905f0757106bc301d24d1d60",
                 "shasum": ""
             },
             "require": {
@@ -126,10 +126,10 @@
                 "release"
             ],
             "support": {
-                "source": "https://github.com/Joomla-Bible-Study/cwm-build-tools/tree/v1.36.0",
+                "source": "https://github.com/Joomla-Bible-Study/cwm-build-tools/tree/v1.37.0",
                 "issues": "https://github.com/Joomla-Bible-Study/cwm-build-tools/issues"
             },
-            "time": "2026-09-25T13:37:42+00:00"
+            "time": "2026-09-25T16:41:40+00:00"
         }
     ],
     "aliases": [],
