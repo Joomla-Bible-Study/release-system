@@ -1,0 +1,120 @@
+{
+    "extension": { "type": "package", "name": "pkg_ars" },
+    "_comment": "Builds pkg_ars via cwm-build-tools, replacing akeeba/buildfiles-public's Phing pipeline for this fork. See build/templates/ for the package manifest and language stub sources (unchanged from the original Akeeba build layout).",
+    "package": {
+        "manifest": "build/templates/pkg_ars.xml",
+        "manifestTokens": {
+            "##VERSION##": "{version}",
+            "##DATE##": "{date:Y-m-d}"
+        },
+        "outputDir": "release",
+        "outputName": "pkg_ars-{version}.zip",
+        "innerLayout": "root",
+        "installer": "component/script.ars.php",
+        "extraFiles": [
+            { "from": "component/LICENSE.txt", "to": "LICENSE.txt" }
+        ],
+        "languageFiles": [
+            { "from": "build/templates/language/de-DE/pkg_ars.sys.ini", "to": "language/de-DE/pkg_ars.sys.ini" },
+            { "from": "build/templates/language/el-GR/pkg_ars.sys.ini", "to": "language/el-GR/pkg_ars.sys.ini" },
+            { "from": "build/templates/language/en-GB/pkg_ars.sys.ini", "to": "language/en-GB/pkg_ars.sys.ini" },
+            { "from": "build/templates/language/es-ES/pkg_ars.sys.ini", "to": "language/es-ES/pkg_ars.sys.ini" },
+            { "from": "build/templates/language/fr-FR/pkg_ars.sys.ini", "to": "language/fr-FR/pkg_ars.sys.ini" },
+            { "from": "build/templates/language/it-IT/pkg_ars.sys.ini", "to": "language/it-IT/pkg_ars.sys.ini" },
+            { "from": "build/templates/language/pt-PT/pkg_ars.sys.ini", "to": "language/pt-PT/pkg_ars.sys.ini" }
+        ],
+        "includes": [
+            {
+                "type": "inline",
+                "outputName": "com_ars.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "com_ars-tmp.zip",
+                    "manifest": "component/ars.xml",
+                    "sources": [
+                        { "from": "component", "to": "" }
+                    ],
+                    "excludes": [".DS_Store", ".git", ".idea", ".vscode", ".svn", ".hg", ".env", "backend/views/", "frontend/views/", "cli/", "script.ars.php", "LICENSE.txt"]
+                }
+            },
+            {
+                "type": "inline",
+                "outputName": "mod_arsdownloads.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "mod_arsdownloads-tmp.zip",
+                    "manifest": "modules/site/arsdownloads/mod_arsdownloads.xml",
+                    "sources": [
+                        { "from": "modules/site/arsdownloads", "to": "" }
+                    ],
+                    "excludes": [".DS_Store"]
+                }
+            },
+            {
+                "type": "inline",
+                "outputName": "mod_arsgraph.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "mod_arsgraph-tmp.zip",
+                    "manifest": "modules/admin/arsgraph/mod_arsgraph.xml",
+                    "sources": [
+                        { "from": "modules/admin/arsgraph", "to": "" }
+                    ],
+                    "excludes": [".DS_Store"]
+                }
+            },
+            {
+                "type": "inline",
+                "outputName": "plg_content_arsdlid.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "arsdlid-tmp.zip",
+                    "manifest": "plugins/content/arsdlid/arsdlid.xml",
+                    "sources": [
+                        { "from": "plugins/content/arsdlid", "to": "" }
+                    ],
+                    "excludes": [".DS_Store"]
+                }
+            },
+            {
+                "type": "inline",
+                "outputName": "plg_content_arslatest.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "arslatest-tmp.zip",
+                    "manifest": "plugins/content/arslatest/arslatest.xml",
+                    "sources": [
+                        { "from": "plugins/content/arslatest", "to": "" }
+                    ],
+                    "excludes": [".DS_Store"]
+                }
+            },
+            {
+                "type": "inline",
+                "outputName": "plg_editors-xtd_arslink.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "arslink-tmp.zip",
+                    "manifest": "plugins/editors-xtd/arslink/arslink.xml",
+                    "sources": [
+                        { "from": "plugins/editors-xtd/arslink", "to": "" }
+                    ],
+                    "excludes": [".DS_Store"]
+                }
+            },
+            {
+                "type": "inline",
+                "outputName": "plg_webservices_ars.zip",
+                "config": {
+                    "outputDir": "release/_tmp",
+                    "outputName": "webservices-ars-tmp.zip",
+                    "manifest": "plugins/webservices/ars/ars.xml",
+                    "sources": [
+                        { "from": "plugins/webservices/ars", "to": "" }
+                    ],
+                    "excludes": [".DS_Store"]
+                }
+            }
+        ]
+    }
+}
