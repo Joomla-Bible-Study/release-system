@@ -44,7 +44,8 @@ A successful run ends in `OK (…)` with **no `Deprecations:` line**.
 - **SQL construction** — list models are handed a recording database that captures the query they
   build, so the `ORDER BY` quoting and direction whitelist are assertable without a database.
 - **Structure** — every PHP file carries its `_JEXEC` guard; every PostgreSQL schema-update file has
-  a MySQL counterpart.
+  a MySQL counterpart; the `#__ars_environments` stock seed data agrees row-for-row between the MySQL
+  and PostgreSQL install files and between the two dialects of an upgrade migration.
 
 ### The stubs
 

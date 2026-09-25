@@ -145,8 +145,11 @@ proves nothing. `ARS Secret` is the level that no test account holds.
 **Categories** span the access matrix: `public`, `restricted`, `restrictedLinked` (same access but
 `show_unauth_links=1` with a `redirect_unauth` target), `secret`, `unpublished`, and `bleedingedge`.
 **Releases** cover the maturities, an unpublished one, a subscriber-only one inside a *public*
-category, and exactly one carrying a security severity. **Items** cover file and link types,
-item-level access inside a public release, and an unpublished item.
+category, and exactly one carrying a security severity. That same release (`publicSecurity`) is also
+the only one given an explicit `changelog_url`, with a deliberate `&` in it — every other release
+leaves the column empty to prove the `<changelogurl>`/`changelogUrl` fallback to `<infourl>`/`infoUrl`.
+**Items** cover file and link types, item-level access inside a public release, and an unpublished
+item.
 
 **Download IDs**: `subscriber` (primary), `subscriberSecondary` (the `userid:dlid` form),
 `subscriberRevoked` (unpublished — must not authenticate), `client` (valid, but its owner holds no
