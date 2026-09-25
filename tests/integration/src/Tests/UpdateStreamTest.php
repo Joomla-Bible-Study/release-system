@@ -294,7 +294,7 @@ class UpdateStreamTest extends AbstractE2ETestCase
 			{
 				$withExplicitUrl++;
 				$this->assertSame(
-					'https://example.com/e2e-changelog/publicSecurity',
+					'https://example.com/e2e-changelog/publicSecurity?a=1&b=2',
 					(string) $update->changelogurl,
 					'The publicSecurity release should advertise its own changelog_url, not <infourl>.'
 				);
@@ -344,7 +344,7 @@ class UpdateStreamTest extends AbstractE2ETestCase
 			{
 				$withExplicitUrl++;
 				$this->assertSame(
-					'https://example.com/e2e-changelog/publicSecurity',
+					'https://example.com/e2e-changelog/publicSecurity?a=1&b=2',
 					$item['changelogUrl'],
 					'The publicSecurity release should advertise its own changelog_url, not infoUrl.'
 				);

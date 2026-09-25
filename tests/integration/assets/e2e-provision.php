@@ -972,8 +972,13 @@ foreach ($releaseSpecs as $key => [$catKey, $version, $maturity, $security, $acc
 			'security'          => $security,
 			'notes'             => '<p>E2E release notes for ' . $key . '.</p>',
 			// Only one release carries an explicit changelog URL, to prove both the override and the
-			// infoUrl fallback in the same fixture set.
-			'changelog_url'     => $key === 'publicSecurity' ? 'https://example.com/e2e-changelog/' . $key : '',
+			// infoUrl fallback in the same fixture set. The `&` is deliberate: addChild() decodes XML
+			// entities when you read a node's text back out, so a naive fallback implementation that
+			// round-trips <infourl>'s text through a second addChild() call silently produces an empty
+			// <changelogurl> for the *fallback* case (infourl always contains an encoded `&`) — but only
+			// an unescaped `&` in the *override* value catches a fix that escapes one path and not the
+			// other, which is why the override value needs one too.
+			'changelog_url'     => $key === 'publicSecurity' ? 'https://example.com/e2e-changelog/' . $key . '?a=1&b=2' : '',
 			'hits'              => 0,
 			'created'           => $created,
 			'created_by'        => $users['manager'],

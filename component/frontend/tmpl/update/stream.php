@@ -74,12 +74,26 @@ foreach ($this->items as $item)
 		$update->addChild('type', $streamTypeMap[$item->type]);
 		$update->addChild('version', $item->version);
 
-		$infoUrl = $update->addChild('infourl', Route::_(
+		$infoUrlValue = Route::_(
 			'index.php?option=com_ars&view=items&release_id=' . $item->release_id . '&category_id=' . $item->category,
 			true, Route::TLS_IGNORE, true
-		));
+		);
+		$infoUrl = $update->addChild('infourl', $infoUrlValue);
 		$infoUrl->addAttribute('title', sprintf('%s %s', $item->cat_title, $item->version));
-		$update->addChild('changelogurl', !empty($item->changelog_url) ? $item->changelog_url : (string) $infoUrl);
+
+		/**
+		 * Reusing $infoUrlValue here, not (string) $infoUrl: SimpleXMLElement::addChild() decodes XML
+		 * entities when you read a node's text back out, so re-feeding that decoded string (with a raw
+		 * `&` instead of `&amp;`) into a second addChild() call silently produces an empty element —
+		 * libxml treats the bare `&` as the start of an invalid entity reference. $infoUrlValue is the
+		 * pre-escaped string Route::_() already returned, so it is safe to reuse directly. The override
+		 * value is raw admin input and gets the same XML-entity escaping applied explicitly, for the
+		 * same reason.
+		 */
+		$update->addChild(
+			'changelogurl',
+			!empty($item->changelog_url) ? htmlspecialchars($item->changelog_url, ENT_XML1) : $infoUrlValue
+		);
 
 		$downloads = $update->addChild('downloads');
 
