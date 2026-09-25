@@ -18,6 +18,18 @@
 	"suggest": {
 		"ext-fileinfo": "*"
 	},
+	"require-dev": {
+		"cwm/build-tools": "^1.36"
+	},
+	"repositories": [
+		{
+			"type": "vcs",
+			"url": "https://github.com/Joomla-Bible-Study/cwm-build-tools"
+		}
+	],
+	"scripts": {
+		"package": "vendor/bin/cwm-package"
+	},
 	"config": {
 		"platform": {
 			"php": "8.1.999"

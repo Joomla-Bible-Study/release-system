@@ -4,9 +4,134 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ac9c1268b627fe16922ad7e1fddd619f",
+    "content-hash": "5f4f00c2ca572285290eb7c080a73b52",
     "packages": [],
-    "packages-dev": [],
+    "packages-dev": [
+        {
+            "name": "cwm/build-tools",
+            "version": "v1.36.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Joomla-Bible-Study/cwm-build-tools.git",
+                "reference": "3d4fb49764af55cebe352c0177ebae6a4c890067"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Joomla-Bible-Study/cwm-build-tools/zipball/3d4fb49764af55cebe352c0177ebae6a4c890067",
+                "reference": "3d4fb49764af55cebe352c0177ebae6a4c890067",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "ext-simplexml": "*",
+                "ext-zip": "*",
+                "php": "^8.3"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.0",
+                "phpunit/phpunit": "^11.0"
+            },
+            "bin": [
+                "bin/cwm-release",
+                "bin/cwm-bump",
+                "bin/cwm-build",
+                "bin/cwm-package",
+                "bin/cwm-sync-configs",
+                "bin/cwm-sync-languages",
+                "bin/cwm-ars-publish",
+                "bin/cwm-ars-list",
+                "bin/cwm-ars-reorder",
+                "bin/cwm-ars-create-stream",
+                "bin/cwm-changelog",
+                "bin/cwm-article",
+                "bin/cwm-init",
+                "bin/cwm-setup",
+                "bin/cwm-link",
+                "bin/cwm-link-check",
+                "bin/cwm-lint-deprecations",
+                "bin/cwm-clean",
+                "bin/cwm-verify",
+                "bin/cwm-install-zip",
+                "bin/cwm-joomla-install",
+                "bin/cwm-joomla-latest",
+                "bin/cwm-joomla-cms-deps",
+                "bin/cwm-baseline",
+                "bin/cwm-lint-queries",
+                "bin/cwm-lint-comments",
+                "bin/cwm-lint-workflows",
+                "bin/cwm-reset-testsite",
+                "bin/cwm-verify-update-stream",
+                "bin/cwm-schema-replay"
+            ],
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "CWM\\BuildTools\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "CWM\\BuildTools\\Tests\\": "tests/"
+                }
+            },
+            "archive": {
+                "exclude": [
+                    "/.github",
+                    "/.gitattributes",
+                    "/.gitignore",
+                    "/.idea",
+                    "/.php-cs-fixer.cache",
+                    "/.phpunit.cache",
+                    "/.phpunit.result.cache",
+                    "/CLAUDE.md",
+                    "/docs",
+                    "/mkdocs.yml",
+                    "/phpunit.xml",
+                    "/phpunit.xml.dist",
+                    "/tests",
+                    "/workflows"
+                ]
+            },
+            "scripts": {
+                "test": [
+                    "@test:php",
+                    "@test:python",
+                    "@test:shell"
+                ],
+                "test:php": [
+                    "phpunit"
+                ],
+                "test:python": [
+                    "python3 -m unittest discover -s tests/python -v"
+                ],
+                "test:shell": [
+                    "rc=0; for t in tests/shell/*.test.sh; do bash \"$t\" || rc=1; done; exit $rc"
+                ]
+            },
+            "license": [
+                "GPL-2.0-or-later"
+            ],
+            "authors": [
+                {
+                    "name": "CWM Team",
+                    "homepage": "https://www.christianwebministries.org"
+                }
+            ],
+            "description": "Shared build, release, and CI tooling for CWM Joomla extensions",
+            "keywords": [
+                "ars",
+                "build",
+                "cwm",
+                "joomla",
+                "release"
+            ],
+            "support": {
+                "source": "https://github.com/Joomla-Bible-Study/cwm-build-tools/tree/v1.36.0",
+                "issues": "https://github.com/Joomla-Bible-Study/cwm-build-tools/issues"
+            },
+            "time": "2026-09-25T13:37:42+00:00"
+        }
+    ],
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {},
