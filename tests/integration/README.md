@@ -15,8 +15,8 @@ that would be serving them.
 * **Docker** with the Compose plugin.
 * **PHP CLI** and **PHPUnit 11** on your `PATH` — the runner is a host-side process that talks to the
   site over its published ports.
-* **Phing** on your `PATH`, to build the package (`phing git`). Skip with `--skip-build` if
-  `release/` already holds one.
+* **Composer**, to build the package (`composer package`, via the `cwm-build-tools` dev dependency).
+  Skip with `--skip-build` if `release/` already holds one.
 * `unzip`, `curl`, `gunzip` and `jq`, used to resolve, fetch and extract Joomla.
 
 ## Quick start
@@ -44,9 +44,10 @@ While the stack is up the site is on <http://localhost:8100> and Mailpit's web U
 <http://localhost:8135>. Those ports were chosen to clear the Akeeba Ticket System harness
 (8090/8091/33307/8125) and the Admin Tools harness (8080/8081/33306), so all three can be up at once.
 
-Note `--skip-build`: `phing git` recompiles the SCSS and minifies the JavaScript, which writes into
-the tracked `component/media/` tree. When you are iterating on tests rather than on ARS, skipping the
-build keeps your working copy clean.
+Note `--skip-build`: `composer package` zips whatever is currently committed -- it does not recompile
+SCSS or minify JavaScript, so it never touches the tracked `component/media/` tree. Skipping it is
+purely about speed (packaging is fast, but not free) when you are iterating on tests rather than on
+ARS itself.
 
 ### The version matrix
 
@@ -71,7 +72,7 @@ want it, but Joomla 4.4 does not support PHP 8.4, so set `PHP_VERSION=8.3` for s
 | `-j`, `--joomla=V` | Override `JOOMLA_VERSION` for this run (`6`, `6.1`, `6.1.2`) |
 | `--matrix` | Run once per version in `JOOMLA_MATRIX` |
 | `-f`, `--filter=NAME` | Passed through to PHPUnit |
-| `--skip-build` | Don't run `phing git`; install the newest package in `release/` |
+| `--skip-build` | Don't run `composer package`; install the newest package in `release/` |
 | `--no-tests` | Provision the site but don't run the suite (leaves it up) |
 | `--keep-containers` | Leave the stack running afterwards |
 | `--down` | Tear everything down and exit |

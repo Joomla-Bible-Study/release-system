@@ -53,7 +53,13 @@ declared there too. Document anything you add in `assets/http/api.http`.
 
 ## Build
 
-Phing, driven by a shared `buildfiles` repo that must be checked out as a sibling at `../buildfiles/`. See the `phing-build` skill for targets and configuration.
+Packaging is `composer package` (`vendor/bin/cwm-package` from
+[cwm-build-tools](https://github.com/Joomla-Bible-Study/cwm-build-tools), a Composer dev dependency), driven by
+`cwm-build.config.json` at the repo root — not the upstream `buildfiles`/Phing pipeline (`build.xml`) this fork used
+to depend on. `cwm-package` zips whatever is currently committed; it does **not** recompile JavaScript or SCSS, so
+`component/media/js/*.min.js` and `component/media/css/*.css` must already be up to date with their sources before
+packaging — there is currently no cwm-build-tools-driven build step for that (see the tests/integration/docker
+gotcha below for the concrete gap this leaves in the e2e harness).
 
 ## Deploy
 

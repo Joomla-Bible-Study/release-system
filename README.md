@@ -16,21 +16,15 @@ Kindly note that we do not provide any support or documentation for this softwar
 
 ## Build instructions
 
-Check out this repository and Akeeba Build Tools — Public Packager using the following directory names:
-
-- `ars` This repository.
-- `buildfiles` [Akeeba Build Tools — Public Packager](https://github.com/akeeba/buildfiles-public)
-- `build.properties` A file created as per the instructions in `buildfiles/README.md`
-
-Then:
+Packaging is driven by [cwm-build-tools](https://github.com/Joomla-Bible-Study/cwm-build-tools) (a Composer dev
+dependency; see `cwm-build.config.json` for the package layout), not the upstream `buildfiles`/Phing pipeline.
 
 ```bash
-cd ars
 composer install
-phing git
+composer package -- --version 7.5.2
 ```
 
-The generated package is under `ars/release`.
+The generated package is under `release/`.
 
 ## JSON:API
 

@@ -14,7 +14,7 @@
 #   3. Build and bring up the Dockerized stack.
 #   4. Install Joomla using its installation/joomla.php CLI helper.
 #   5. Point Joomla's mailer at Mailpit and normalise the site configuration.
-#   6. Build ARS with `phing git` and install pkg_ars.
+#   6. Build ARS with `composer package` (cwm-build-tools) and install pkg_ars.
 #   7. Create the release repository directory, then provision the ARS
 #      fixtures and the ACL user matrix.
 #   8. Run the PHPUnit end-to-end suite.
@@ -24,7 +24,7 @@
 #   -p, --php=VERSION      Override PHP_VERSION (e.g. 8.1, 8.3, 8.5)
 #       --matrix           Run every Joomla/PHP pair in JOOMLA_MATRIX, then exit
 #   -f, --filter=NAME      Passed through to PHPUnit as --filter
-#       --skip-build       Do not run `phing git`; use the newest package in release/
+#       --skip-build       Do not run `composer package`; use the newest package in release/
 #       --down             Tear everything down and exit
 #       --no-tests         Provision the site but do not run the suite
 #       --keep-containers  Leave the stack running after the tests finish
@@ -169,7 +169,7 @@ if [ "${RUN_MATRIX}" -eq 1 ]; then
 			echo
 			log "──────── matrix: Joomla ${jver} on PHP ${pver} ────────"
 			# Build ARS once, on the first iteration only; the package does not change
-			# between Joomla or PHP versions and `phing git` is not cheap.
+			# between Joomla or PHP versions and rebuilding it every time is wasted work.
 			EXTRA=()
 			if [ "${FIRST}" -eq 0 ] || [ "${SKIP_BUILD}" -eq 1 ]; then
 				EXTRA+=("--skip-build")
@@ -552,9 +552,18 @@ build_ars() {
 		warn "Skipping build (--skip-build); using the existing package in release/"
 		return 0
 	fi
-	command -v phing >/dev/null 2>&1 || die "phing is not on PATH (needed to build ARS). Use --skip-build to reuse an existing package."
-	log "Building ARS with 'phing git'"
-	( cd "${REPO_ROOT}" && phing git ) || die "phing git failed."
+	command -v composer >/dev/null 2>&1 || die "composer is not on PATH (needed to build ARS). Use --skip-build to reuse an existing package."
+
+	# cwm-package just zips whatever is currently committed (including the already-minified
+	# component/media/js|css/*.min.* files) -- it does not recompile JS/SCSS. That matches what an
+	# e2e run needs: the version being tested. Version comes from the CHANGELOG's top heading (e.g.
+	# "Akeeba Release System 7.5.2"), the same source AutoVersionTask used to read for `phing git`.
+	local ars_version
+	ars_version="$(sed -n '2p' "${REPO_ROOT}/CHANGELOG" | awk '{print $NF}')"
+	[ -n "${ars_version}" ] || die "Could not read the ARS version from the CHANGELOG's top heading."
+
+	log "Building ARS ${ars_version} with 'composer package'"
+	( cd "${REPO_ROOT}" && composer package -- --version "${ars_version}" ) || die "composer package failed."
 	ok "ARS built"
 }
 
