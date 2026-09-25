@@ -15,6 +15,7 @@ Akeeba Release System 7.5.2
 ~ Joomla 7.0 readiness: dropped the unreachable Toolbar::getInstance() fallback from the backend views
 ~ Build every query through Helper\DbQuery::create(), so the createQuery() compatibility branch lives in one place instead of seventy
 + CWM: new optional Changelog URL field on releases, advertised as <changelogurl>/changelogUrl on every update-stream entry (falling back to the release's own info page when left empty), so Joomla's Update screen shows a changelog link instead of N/A [gh-1]
++ CWM: added Joomla 5.0-5.4, Joomla 6.0-6.2, and PHP 8.2-8.6 to the stock Environments list, which previously stopped at Joomla 4.1 and PHP 8.1
 # [MEDIUM] Bleeding Edge scans never ran for a newly created category, because its first-scan check compared identical creation and modification timestamps
 # [MEDIUM] Releases could be saved without a created-by user association
 # [LOW] PHP Warning on inaccessible item [gh-251]

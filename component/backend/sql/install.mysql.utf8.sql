@@ -203,6 +203,14 @@ VALUES (1, 'Joomla! 1.5', 'joomla/1.5'),
        (42, 'Joomla! 3.10', 'joomla/3.10'),
        (32, 'Joomla! 4.0', 'joomla/4.0'),
        (33, 'Joomla! 4.1', 'joomla/4.1'),
+       (44, 'Joomla! 5.0', 'joomla/5.0'),
+       (45, 'Joomla! 5.1', 'joomla/5.1'),
+       (46, 'Joomla! 5.2', 'joomla/5.2'),
+       (47, 'Joomla! 5.3', 'joomla/5.3'),
+       (48, 'Joomla! 5.4', 'joomla/5.4'),
+       (49, 'Joomla! 6.0', 'joomla/6.0'),
+       (50, 'Joomla! 6.1', 'joomla/6.1'),
+       (51, 'Joomla! 6.2', 'joomla/6.2'),
        (12, 'Linux (32-bit)', 'linux/x86'),
        (13, 'Linux (64-bit)', 'linux/x86-64'),
        (14, 'macOS', 'macosx/10'),
@@ -227,7 +235,12 @@ VALUES (1, 'Joomla! 1.5', 'joomla/1.5'),
        (39, 'PHP 7.2', 'php/7.2'),
        (40, 'PHP 7.3', 'php/7.3'),
        (41, 'PHP 8.0', 'php/8.0'),
-       (43, 'PHP 8.1', 'php/8.1')
+       (43, 'PHP 8.1', 'php/8.1'),
+       (52, 'PHP 8.2', 'php/8.2'),
+       (53, 'PHP 8.3', 'php/8.3'),
+       (54, 'PHP 8.4', 'php/8.4'),
+       (55, 'PHP 8.5', 'php/8.5'),
+       (56, 'PHP 8.6', 'php/8.6')
 ;
 
 -- UCM Content types (for tags)
