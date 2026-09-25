@@ -267,6 +267,33 @@ class UpdateStreamTest extends AbstractE2ETestCase
 	}
 
 	/**
+	 * Every `<update>` element carries a `<changelogurl>`, otherwise Joomla's Extensions → Update screen
+	 * shows "N/A" in its Changelog column. We reuse `<infourl>` verbatim: that page already renders the
+	 * release notes, so it doubles as a changelog page without a new field on `#__ars_releases`.
+	 *
+	 * @return  void
+	 * @since   7.5.2
+	 */
+	public function testUpdateElementsCarryAChangelogUrl(): void
+	{
+		$response = $this->guest()->get($this->streamUrl('main'));
+		$xml      = new SimpleXMLElement($response->body);
+
+		$this->assertGreaterThan(0, count($xml->update), 'The main stream has no <update> elements.');
+
+		foreach ($xml->update as $update)
+		{
+			$this->assertGreaterThan(0, count($update->changelogurl), 'An <update> element has no <changelogurl> element.');
+			$this->assertNotEmpty((string) $update->changelogurl, 'The <changelogurl> element is empty.');
+			$this->assertSame(
+				(string) $update->infourl,
+				(string) $update->changelogurl,
+				'The <changelogurl> element should reuse the <infourl> value.'
+			);
+		}
+	}
+
+	/**
 	 * A `&dlid=` query parameter is threaded into the `downloadurl` of every `<update>` element.
 	 *
 	 * REGRESSION GUARD. This used to be a hard 500 on every update-stream request that carried a

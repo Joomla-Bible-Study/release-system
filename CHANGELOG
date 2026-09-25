@@ -14,6 +14,7 @@ Akeeba Release System 7.5.2
 ~ Joomla 7.0 readiness: dropped the unreachable CMSObject fallback from plg_editors-xtd_arslink
 ~ Joomla 7.0 readiness: dropped the unreachable Toolbar::getInstance() fallback from the backend views
 ~ Build every query through Helper\DbQuery::create(), so the createQuery() compatibility branch lives in one place instead of seventy
++ CWM: emit <changelogurl> on every update-stream entry, so Joomla's Update screen shows a changelog link instead of N/A [gh-1]
 # [MEDIUM] Bleeding Edge scans never ran for a newly created category, because its first-scan check compared identical creation and modification timestamps
 # [MEDIUM] Releases could be saved without a created-by user association
 # [LOW] PHP Warning on inaccessible item [gh-251]
