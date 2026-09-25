@@ -54,3 +54,15 @@ declared there too. Document anything you add in `assets/http/api.http`.
 ## Build
 
 Phing, driven by a shared `buildfiles` repo that must be checked out as a sibling at `../buildfiles/`. See the `phing-build` skill for targets and configuration.
+
+## Deploy
+
+- **Clear the target site's cache immediately after every package upgrade.** Joomla's page cache keys
+  update-stream responses (`view=update&task=stream`) only on the URL's *registered* params
+  (`option`, `view`, `task`, `format`, `id`, `dlid` — see `UpdateController::stream()`), so a site
+  with caching enabled can keep silently serving the pre-upgrade XML/JSON shape — e.g. missing a
+  newly added element like `<changelogurl>` — even though the new code and schema are live. A
+  query-string cache-buster does **not** work, since it isn't one of the registered params and Joomla
+  ignores it when computing the cache key. Clear cache via System → Clear Cache (or the "Clean Cache"
+  toolbar button) right after installing, then re-verify the stream output before calling the upgrade
+  done.
