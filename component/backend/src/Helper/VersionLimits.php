@@ -56,7 +56,7 @@ class VersionLimits
 	 * @var   string
 	 * @since 7.5.1
 	 */
-	private static string $minPHPVersion = '8.1.0';
+	private static string $minPHPVersion = '8.3.0';
 
 	/**
 	 * Maximum supported PHP version

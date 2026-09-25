@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5f4f00c2ca572285290eb7c080a73b52",
+    "content-hash": "c232bae366da37cbc6eabe4392bb5719",
     "packages": [],
     "packages-dev": [
         {
@@ -12,7 +12,7 @@
             "version": "v1.36.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/Joomla-Bible-Study/cwm-build-tools.git",
+                "url": "git@github.com:Joomla-Bible-Study/cwm-build-tools.git",
                 "reference": "3d4fb49764af55cebe352c0177ebae6a4c890067"
             },
             "dist": {
@@ -138,13 +138,13 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.1.0 <8.7",
+        "php": ">=8.3.0 <8.7",
         "ext-json": "*",
         "ext-simplexml": "*"
     },
     "platform-dev": {},
     "platform-overrides": {
-        "php": "8.1.999"
+        "php": "8.3.999"
     },
     "plugin-api-version": "2.9.0"
 }

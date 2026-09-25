@@ -248,7 +248,7 @@ MIN_PHP_VERSION="$(sed -nE "s/.*\\\$minimumPhp[[:space:]]*=[[:space:]]*'([0-9.]+
 	"${REPO_ROOT}/component/script.ars.php" | head -1)"
 MAX_PHP_VERSION="$(sed -nE "s/.*\\\$maximumPhp[[:space:]]*=[[:space:]]*'([0-9.]+)'.*/\1/p" \
 	"${REPO_ROOT}/component/script.ars.php" | head -1)"
-: "${MIN_PHP_VERSION:=8.1.0}"
+: "${MIN_PHP_VERSION:=8.3.0}"
 : "${MAX_PHP_VERSION:=8.7}"
 
 # Reject a PHP version outside what ARS itself claims to support, before we spend minutes on it.

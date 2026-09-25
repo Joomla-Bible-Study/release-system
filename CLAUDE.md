@@ -16,8 +16,9 @@ Akeeba Release System (ARS) — a Joomla package extension for managing software
   ARS *and* that Joomla version permit, plus any **PHP major-version boundary** that falls inside
   that window. The edges are where incompatibilities live — a version in the middle of a range
   almost never breaks something the edges do not, and each pair costs a full site provision.
-  Today: ARS allows `>=8.1 <8.7`; Joomla 5.4 requires PHP 8.1+, Joomla 6.x requires 8.3+; the newest
-  published `php:*-fpm` image is 8.5. Hence `5.4:8.1,8.5 6.0:8.3,8.5 6.1:8.3,8.5`. As an
+  Today: ARS allows `>=8.3 <8.7`; Joomla 5.4 requires PHP 8.1+, Joomla 6.x requires 8.3+, but ARS's
+  own floor now binds first for 5.4 too, so both edges land on 8.3; the newest published `php:*-fpm`
+  image is 8.5. Hence `5.4:8.3,8.5 6.0:8.3,8.5 6.1:8.3,8.5`. As an
   illustration of the major-boundary clause: were Joomla 4.4 still supported, it would need
   7.4, 8.0 and 8.2 — the two edges *and* 8.0, because a PHP major jump breaks more than a minor one.
   Recompute the pairs whenever a floor moves or a new PHP is released; `run.sh` enforces both floors
