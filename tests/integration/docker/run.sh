@@ -72,6 +72,13 @@ else
 fi
 command -v docker >/dev/null 2>&1 || die "Docker is not installed or not on PATH."
 
+# `docker compose version` above is client-only and passes even when the engine itself is
+# unreachable -- e.g. Docker Desktop's macOS side reports "running" while its internal VM is still
+# starting or wedged. `docker info` talks to the engine and fails fast in that state, so check it
+# explicitly here rather than letting a later `docker compose up` hang or fail confusingly deep into
+# provisioning.
+docker info >/dev/null 2>&1 || die "Docker is installed but its engine is not reachable (docker info failed). Is Docker Desktop running?"
+
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
