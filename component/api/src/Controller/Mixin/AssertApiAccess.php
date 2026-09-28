@@ -100,4 +100,87 @@ trait AssertApiAccess
 
 		return (array) $this->input->get('data', is_array($raw) ? $raw : [], 'array');
 	}
+
+	/**
+	 * Refuse a POST (create) request that carries an `id`, closing an ID-smuggling hole in Joomla core shared by
+	 * every one of ARS's seven API write controllers.
+	 *
+	 * The bug: `Joomla\CMS\MVC\Controller\ApiController::add()` calls `$this->save()` with NO argument, so inside
+	 * `ApiController::save($recordKey = null)`, `$recordKey` is `null` and `$data[$key] = $recordKey;`
+	 * unconditionally forces the submitted body's `id` to `null` — regardless of what the client actually sent.
+	 * `Joomla\CMS\MVC\Model\AdminModel::save($data)` then resolves the primary key with
+	 * `$pk = $data[$key] ?? (int) $this->getState($this->getName() . '.id')`. Because PHP's `??` treats a
+	 * *null-valued* array key the same as an unset one, this ALWAYS falls through to `getState()` for a create.
+	 * That state is populated by `AdminModel::populateState()` via
+	 * `Factory::getApplication()->getInput()->getInt($key)` — and for the API application specifically, that
+	 * `Input` object is the plain `Joomla\Input\Input` created by
+	 * `Joomla\CMS\Service\Provider\Application::registerApiApplicationService()` (`new ApiApplication(null, ...)`
+	 * — no `Input` is injected), whose constructor falls back to `$source ?? $_REQUEST`. `$_REQUEST` DOES include
+	 * query-string parameters, so a request like `POST /api/index.php/v1/ars/items?id=12` with a JSON body makes
+	 * `getInt('id')` resolve to `12` — even though the submitted JSON body itself is parsed into a completely
+	 * separate `$this->input->json` sub-object that `populateState()` never touches.
+	 *
+	 * Net effect: `AdminModel::save()` sees `$pk = 12 > 0`, `load()`s that EXISTING row and overwrites it with the
+	 * submitted body — a create silently becomes an edit of an unrelated record — authorised only by `allowAdd()`,
+	 * which validates the NEW record's own (attacker-controlled) category and has no way to know an existing,
+	 * unrelated row is about to be loaded and overwritten instead. `allowEdit()` — where every entity's
+	 * source/destination-category defence actually lives — is never called.
+	 *
+	 * This is fixed here, in the one trait mixed into all seven API controllers (Categories, Releases, Items,
+	 * Autodescriptions, Dlidlabels, Environments, Updatestreams — see `use AssertApiAccess` in each), rather than
+	 * per-entity, because none of them override `add()`/`edit()`/`save()` themselves: every one of them reaches
+	 * this exact `ApiController::add()` → `save()` → `AdminModel::save()` chain unmodified, so the vulnerable
+	 * mechanism is identical for all seven regardless of whether that entity happens to have category-reassignment
+	 * logic of its own. A per-entity Model-layer fix would only ever cover the entities that have such logic
+	 * (Release/Item/Autodescription/Updatestream) and would still leave Categories, Dlidlabels and Environments —
+	 * which have no category-reassignment logic to piggyback on — exploitable for silently overwriting arbitrary
+	 * fields of an unrelated existing record.
+	 *
+	 * Rejecting is deliberate, not resetting `id` to 0 and letting the request through as a fresh create: a
+	 * genuine create request has no reason to carry an `id` at all, and silently discarding it would turn a
+	 * detected attack into a *successful* create in whatever category the caller legitimately holds
+	 * `core.create` on — the opposite of a safe failure mode, and not what "the request now fails" means for a
+	 * caller checking status codes.
+	 *
+	 * Only the create ($recordKey === null) path is affected. `ApiController::edit()` always calls
+	 * `$this->save($recordKey)` with a real, non-null, already-`allowEdit()`-authorised id (or throws 404 first),
+	 * so a legitimate PATCH is untouched by this check.
+	 *
+	 * @param   int|null  $recordKey  The primary key `ApiController::save()` was called with; null means "called
+	 *                                 from add()", matching Joomla's own contract for this argument.
+	 *
+	 * @return  void
+	 * @throws  NotAllowed  When a create request carries a positive `id`.
+	 * @since   7.5.2
+	 */
+	protected function assertCreateCarriesNoId($recordKey): void
+	{
+		if ($recordKey !== null)
+		{
+			return;
+		}
+
+		if ($this->app->getInput()->getInt('id') > 0)
+		{
+			throw new NotAllowed('JLIB_APPLICATION_ERROR_CREATE_RECORD_NOT_PERMITTED', 403);
+		}
+	}
+
+	/**
+	 * Overrides {@see \Joomla\CMS\MVC\Controller\ApiController::save()} purely to run
+	 * {@see self::assertCreateCarriesNoId()} before Joomla's own primary-key resolution ever runs — see that
+	 * method's docblock for the full vulnerability this closes.
+	 *
+	 * @param   int|null  $recordKey  The primary key of the item, or null when called from add().
+	 *
+	 * @return  int|bool  The record ID on success, false on failure — exactly {@see ApiController::save()}'s
+	 *                     own return contract.
+	 * @since   7.5.2
+	 */
+	protected function save($recordKey = null)
+	{
+		$this->assertCreateCarriesNoId($recordKey);
+
+		return parent::save($recordKey);
+	}
 }

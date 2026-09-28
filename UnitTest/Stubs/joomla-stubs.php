@@ -778,6 +778,20 @@ namespace Joomla\CMS\Date {
 	}
 }
 
+namespace Joomla\CMS\Access\Exception {
+	/**
+	 * Stand-in for Joomla\CMS\Access\Exception\NotAllowed. Matches the real class exactly: a bare
+	 * \RuntimeException subclass with no constructor of its own, so `new NotAllowed($message, $code)`
+	 * behaves identically to the real thing.
+	 */
+	if (!class_exists(NotAllowed::class, false))
+	{
+		class NotAllowed extends \RuntimeException
+		{
+		}
+	}
+}
+
 namespace Joomla\CMS {
 	/**
 	 * Stand-in for Joomla\CMS\Version. The constants are what ARS's update-stream code reads to
@@ -1016,6 +1030,72 @@ namespace Joomla\CMS\Table {
 	}
 }
 
+namespace Joomla\CMS\Helper {
+	/**
+	 * Stand-in for Joomla\CMS\Helper\TagsHelper. It exists purely as a type-hint target for
+	 * Joomla\CMS\Tag\TaggableTableTrait and for ReleaseModel::getItem(), which fetches a record's assigned tag
+	 * ids through it. No test in this suite exercises tag assignment, so this stub stores nothing and always
+	 * reports no tags.
+	 */
+	if (!class_exists(TagsHelper::class, false))
+	{
+		class TagsHelper
+		{
+			public function getTagIds($id, $prefix)
+			{
+				return [];
+			}
+		}
+	}
+}
+
+namespace Joomla\CMS\Tag {
+	use Joomla\CMS\Helper\TagsHelper;
+	use Joomla\CMS\Table\TableInterface;
+
+	/**
+	 * Stand-ins for Joomla\CMS\Tag\TaggableTableInterface / TaggableTableTrait, which ReleaseTable implements so
+	 * releases can carry tags. Only the shape (interface + trait method signatures) is reproduced; the trait's
+	 * behaviour is the same trivial getter/setter pair the real one has.
+	 */
+	if (!interface_exists(TaggableTableInterface::class, false))
+	{
+		interface TaggableTableInterface extends TableInterface
+		{
+			public function getTypeAlias();
+
+			public function getTagsHelper(): ?TagsHelper;
+
+			public function setTagsHelper(TagsHelper $tagsHelper): void;
+
+			public function clearTagsHelper(): void;
+		}
+	}
+
+	if (!trait_exists(TaggableTableTrait::class, false))
+	{
+		trait TaggableTableTrait
+		{
+			public $tagsHelper;
+
+			public function getTagsHelper(): ?TagsHelper
+			{
+				return $this->tagsHelper;
+			}
+
+			public function setTagsHelper(TagsHelper $tagsHelper): void
+			{
+				$this->tagsHelper = $tagsHelper;
+			}
+
+			public function clearTagsHelper(): void
+			{
+				$this->tagsHelper = null;
+			}
+		}
+	}
+}
+
 namespace Joomla\CMS\MVC\Factory {
 	if (!interface_exists(MVCFactoryInterface::class, false))
 	{
@@ -1243,6 +1323,32 @@ namespace Joomla\CMS\MVC\Controller {
 	{
 		class AdminController extends BaseController
 		{
+		}
+	}
+
+	/**
+	 * Stand-in for Joomla's Joomla\CMS\MVC\Controller\ApiController. Its `save()` here is a bare
+	 * spy (records that it ran and what it was called with, returns a sentinel) rather than a
+	 * faithful reimplementation of the real add()/save()/AdminModel interaction that fix's own
+	 * docblock describes -- that interaction is exactly what the e2e suite exercises against a
+	 * real Joomla install. What this stub buys is proof that
+	 * Akeeba\Component\ARS\Api\Controller\Mixin\AssertApiAccess::save() really does delegate to
+	 * `parent::save()` (the ApiController it is designed to be mixed into) with the same
+	 * `$recordKey`, and really does refuse to when it shouldn't.
+	 */
+	if (!class_exists(ApiController::class, false))
+	{
+		class ApiController extends BaseController
+		{
+			/** @var array<int,int|null> Every $recordKey this was called with, in call order. */
+			public array $saveCalls = [];
+
+			protected function save($recordKey = null)
+			{
+				$this->saveCalls[] = $recordKey;
+
+				return $recordKey ?? 42;
+			}
 		}
 	}
 }

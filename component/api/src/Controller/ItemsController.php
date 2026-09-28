@@ -9,6 +9,7 @@ namespace Akeeba\Component\ARS\Api\Controller;
 
 defined('_JEXEC') || die;
 
+use Akeeba\Component\ARS\Administrator\Table\ItemTable;
 use Akeeba\Component\ARS\Api\Controller\Mixin\AssertApiAccess;
 use Akeeba\Component\ARS\Api\Controller\Mixin\PopulateModelState;
 use Joomla\CMS\MVC\Controller\ApiController;
@@ -97,6 +98,19 @@ class ItemsController extends ApiController
 		rmdir(dirname($fileToDelete));
 	}
 
+	/**
+	 * Defense in depth, ON TOP OF (not instead of) ItemModel::isNewItemAuthorised(), which is the check that
+	 * now AUTHORITATIVELY decides every save AdminModel::save() itself resolves to a new record (pk <= 0) --
+	 * exactly how allowEdit() below relates to
+	 * ItemModel::isReleaseChangeAuthorised(). This resolves release_id via a bare `(int)` cast on the RAW
+	 * request body (ApiController::add() calls allowAdd() with no data at all, so this always falls back to
+	 * getRequestData()) -- reached BEFORE ApiController::save() ever runs that body through Form::filter()
+	 * (and therefore through item.xml's release_id filter="integer"), so it can disagree with what actually
+	 * ends up bound and persisted for a release_id shaped like "2e1" (PHP's native cast parses scientific
+	 * notation; Joomla's own InputFilter::cleanInt() does not). Left as-is deliberately: a faster, friendlier
+	 * 403 for the common case, not a guarantee, since the Model-layer check runs unconditionally regardless
+	 * of what this method decides.
+	 */
 	protected function allowAdd($data = [])
 	{
 		$user = $this->app->getIdentity();
@@ -142,7 +156,44 @@ class ItemsController extends ApiController
 			return false;
 		}
 
-		return $user->authorise('core.edit', 'com_ars.category.' . $categoryId);
+		if (!$user->authorise('core.edit', 'com_ars.category.' . $categoryId)) {
+			return false;
+		}
+
+		/**
+		 * Defense in depth, ON TOP OF (not instead of) ItemModel::isReleaseChangeAuthorised(), which remains
+		 * the check that authoritatively closes this bypass. Joomla\CMS\MVC\Controller\ApiController::edit()
+		 * calls allowEdit() with ONLY the record's primary key ($data here never carries release_id), so this
+		 * reads the submitted body itself via getRequestData() -- exactly as allowAdd() above already does --
+		 * to reject early, with a proper 403, when the submitted release_id would move this item into a
+		 * DIFFERENT category the user holds no core.create/core.edit right on.
+		 */
+		// Uses the same ItemTable::normalizeReleaseId() the table applies immediately before
+		// persistence (see that method's docblock), so the fractional-numeric-string shape this fix
+		// targets (e.g. '20.99') is judged consistently here too. Joomla's own
+		// Joomla\CMS\MVC\Controller\ApiController::edit() calls allowEdit() BEFORE
+		// ApiController::save() ever runs the request body through Form::filter() (and therefore
+		// through item.xml's release_id filter="integer"), so this check unavoidably reads the RAW,
+		// unfiltered body via getRequestData() -- whereas ItemModel::isReleaseChangeAuthorised() is
+		// only reached from inside that later save(), with the FORM-FILTERED data. This is a fast,
+		// best-effort rejection on top of that authoritative check, not a guarantee that the two can
+		// never disagree on every conceivable input.
+		$newReleaseId = ItemTable::normalizeReleaseId($this->getRequestData()['release_id'] ?? 0);
+
+		if ($newReleaseId > 0) {
+			$newCategoryId = $this->getModel('Items')->getCategoryFromRelease($newReleaseId);
+
+			if (
+				$newCategoryId
+				&& (int) $newCategoryId !== (int) $categoryId
+				&& !$user->authorise('core.create', 'com_ars.category.' . $newCategoryId)
+				&& !$user->authorise('core.edit', 'com_ars.category.' . $newCategoryId)
+			) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private function getFileNameToDelete(int $id): string

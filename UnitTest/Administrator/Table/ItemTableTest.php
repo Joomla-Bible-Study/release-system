@@ -399,4 +399,208 @@ class ItemTableTest extends TestCase
 
 		$this->invokeProtected($item, 'onBeforeCheck');
 	}
+
+	// -----------------------------------------------------------------------------------------------------------
+	// onBeforeCheck(): explicit `updatestream` must be scoped to this item's own release/category.
+	//
+	// Regression coverage for the cross-tenant supply-chain vulnerability: `$this->updatestream = $this->updatestream
+	// ?: $this->getUpdateStream();` only ever validated an AUTO-SELECTED stream (the empty branch). An explicitly
+	// submitted, non-empty updatestream (backend form, or POST/PATCH v1/ars/items via the JSON:API) was bound
+	// verbatim with no check that it belongs to the item's own category, letting a per-category delegated editor
+	// bind their item to ANY other product's update stream.
+	// -----------------------------------------------------------------------------------------------------------
+
+	/** A ScriptedRecordingDatabase whose ars_updatestreams table answers with the given rows. */
+	private function dbWithUpdateStreams(array $updateStreamRows): ScriptedRecordingDatabase
+	{
+		$db          = new ScriptedRecordingDatabase();
+		$db->byTable = [
+			'ars_items'         => [],
+			'ars_autoitemdesc'  => [],
+			'ars_updatestreams' => $updateStreamRows,
+		];
+
+		return $db;
+	}
+
+	public function testExplicitCrossCategoryUpdateStreamIsRejected(): void
+	{
+		// Only stream #10 is scoped to this item's category (per the ScriptedRecordingDatabase's byTable fixture,
+		// which stands in for the real "category IN (this item's release's category)" WHERE clause).
+		$db = $this->dbWithUpdateStreams([
+			(object) ['id' => 10, 'packname' => 'awesome-*.zip', 'element' => ''],
+		]);
+
+		$item               = $this->baselineItem($db);
+		$item->updatestream = 99; // Belongs to a DIFFERENT category/product's update stream.
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('COM_ARS_ITEM_ERR_INVALID_UPDATESTREAM');
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	public function testExplicitUpdateStreamThatLooseCompareWouldMatchIsRejected(): void
+	{
+		// `true` loose-compares equal to any non-zero int (e.g. 10), which is why the fix must compare strictly
+		// (in_array(..., true)) rather than with assertInArray()'s loose comparison.
+		$db = $this->dbWithUpdateStreams([
+			(object) ['id' => 10, 'packname' => 'awesome-*.zip', 'element' => ''],
+		]);
+
+		$item               = $this->baselineItem($db);
+		$item->updatestream = true;
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('COM_ARS_ITEM_ERR_INVALID_UPDATESTREAM');
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	public function testExplicitSameCategoryUpdateStreamIsAccepted(): void
+	{
+		// The scoped stream's packname deliberately does NOT match the item's filename: category membership, not
+		// fnmatch auto-pick eligibility, is the security boundary an explicit choice must satisfy. The DB also
+		// returns the id as a string, the way a real DB driver would, to pin the int cast.
+		$db = $this->dbWithUpdateStreams([
+			(object) ['id' => '10', 'packname' => 'nomatch-*.zip', 'element' => ''],
+		]);
+
+		$item               = $this->baselineItem($db);
+		$item->updatestream = 10;
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame(10, $item->updatestream);
+	}
+
+	public static function emptyUpdateStreamProvider(): array
+	{
+		return [
+			'null'         => [null],
+			'empty string' => [''],
+			'zero (int)'   => [0],
+			'zero (string)' => ['0'],
+		];
+	}
+
+	#[DataProvider('emptyUpdateStreamProvider')]
+	public function testEmptyUpdateStreamStillAutoSelectsAsBefore($emptyValue): void
+	{
+		$db = $this->dbWithUpdateStreams([
+			(object) ['id' => 42, 'packname' => 'package-*.zip', 'element' => ''],
+		]);
+
+		$item               = $this->baselineItem($db);
+		$item->filename     = 'package-1.2.3.zip';
+		$item->updatestream = $emptyValue;
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame(42, $item->updatestream);
+	}
+
+	public function testCategoryUpdateStreamsQueryScopesByCategory(): void
+	{
+		$db = $this->dbWithUpdateStreams([
+			(object) ['id' => 10, 'packname' => 'awesome-*.zip', 'element' => ''],
+		]);
+
+		$item               = $this->baselineItem($db);
+		$item->updatestream = 10;
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$updateStreamQuery = null;
+
+		foreach ($db->queries as $query)
+		{
+			if (str_contains($query->fromCalls[0] ?? '', 'ars_updatestreams'))
+			{
+				$updateStreamQuery = $query;
+			}
+		}
+
+		$this->assertNotNull($updateStreamQuery, 'The update-stream query was never issued.');
+		$this->assertNotEmpty(
+			array_filter($updateStreamQuery->whereCalls, fn($where) => str_contains($where, 'category') && str_contains($where, 'IN')),
+			'The update-stream query must scope candidates by category, or an explicit value from any category would pass validation.'
+		);
+	}
+
+	// -----------------------------------------------------------------------------------------------------------
+	// normalizeReleaseId() / onBeforeCheck(): the numeric-coercion residual of the cross-category bypass.
+	//
+	// A raw fractional string like '20.99' reaching Table::store() un-normalized would have MySQL's own
+	// implicit string-to-int conversion ROUND it when storing it into an int column (empirically: '2.99' ->
+	// 3 under STRICT_TRANS_TABLES) rather than TRUNCATE it the way PHP's (int) cast does (-> 20). Since
+	// ItemModel::isReleaseChangeAuthorised() applies that same (int)-equivalent cast to the very same
+	// $data['release_id'] that AdminModel::save() goes on to bind() onto this table within the same call,
+	// leaving THIS table's own copy un-normalized could make the value it actually persists diverge from
+	// the one that check already decided was "unchanged" (e.g. '20.99' matching an item's already-authorised
+	// current release_id of 20) -- reassigning the item to a different, unauthorised category with zero
+	// authorisation check having run. normalizeReleaseId() must be applied before anything -- including
+	// this table's own category-scoped queries -- reads release_id, so this table can never persist a
+	// release_id other than the one isReleaseChangeAuthorised() reasoned about.
+	// -----------------------------------------------------------------------------------------------------------
+
+	public static function nonCanonicalReleaseIdProvider(): array
+	{
+		return [
+			'fractional string truncates like PHP (int), not MySQL rounding' => ['20.99', 20],
+			'fractional string that would round UP under MySQL storage'      => ['2.99', 2],
+			'negative fractional string'                                     => ['-5.7', -5],
+			'leading/trailing whitespace'                                    => [' 7 ', 7],
+			'already-canonical int is left unchanged'                       => [7, 7],
+			'already-canonical numeric string is left unchanged'            => ['7', 7],
+		];
+	}
+
+	#[DataProvider('nonCanonicalReleaseIdProvider')]
+	public function testNormalizeReleaseIdTruncatesToCanonicalInteger($input, int $expected): void
+	{
+		$this->assertSame($expected, ItemTable::normalizeReleaseId($input));
+	}
+
+	public function testOnBeforeCheckNormalizesNonCanonicalReleaseIdBeforeAnyQueryReadsIt(): void
+	{
+		// '20.99' is the exact empirically-confirmed bypass shape: it must land in the table as the clean
+		// int 20, not survive as the raw fractional string for MySQL to independently round on store().
+		$item              = $this->baselineItem($this->emptyScriptedDb());
+		$item->release_id  = '20.99';
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame(20, $item->release_id);
+	}
+
+	public function testOnBeforeCheckNormalizesReleaseIdBeforeTheDuplicateTitleQueryBindsIt(): void
+	{
+		// Regression guard for normalizing too late: if release_id were still '20.99' when this query's
+		// :release_id parameter is bound, the query itself would be scoped by the wrong, unnormalized value.
+		$db          = new ScriptedRecordingDatabase();
+		$db->byTable = [
+			'ars_items'         => [],
+			'ars_autoitemdesc'  => [],
+			'ars_updatestreams' => [],
+		];
+
+		$item             = $this->baselineItem($db);
+		$item->release_id = '20.99';
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$itemsQuery = null;
+
+		foreach ($db->queries as $query)
+		{
+			if (str_contains($query->fromCalls[0] ?? '', 'ars_items'))
+			{
+				$itemsQuery = $query;
+			}
+		}
+
+		$this->assertNotNull($itemsQuery, 'The duplicate title/alias query was never issued.');
+		$this->assertSame(20, $itemsQuery->bindValues[':release_id'] ?? null);
+	}
 }

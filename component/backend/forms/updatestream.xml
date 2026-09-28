@@ -41,6 +41,7 @@
                 description="COM_ARS_UPDATESTREAM_CATEGORY_DESC"
                 layout="joomla.form.field.list-fancy-select"
                 required="true"
+                filter="integer"
         >
         </field>
 

@@ -88,6 +88,42 @@ class ReleaseController extends FormController
 		}
 
 		// The category has been set. Check the category permissions.
-		return $this->app->getIdentity()->authorise('core.edit', $this->option . '.category.' . $categoryId);
+		if (!$this->app->getIdentity()->authorise('core.edit', $this->option . '.category.' . $categoryId))
+		{
+			return false;
+		}
+
+		/**
+		 * Defense in depth. This method only ever re-authorises the record's CURRENT, pre-edit category (fetched
+		 * fresh from the database above) -- it never looks at a category_id the request is actually submitting.
+		 * FormController::save() calls allowSave()/allowEdit() with the full posted 'jform' data (which does
+		 * include category_id when this is a real save, as opposed to the "open the edit form" GET request, where
+		 * $data only ever carries the record id and this block is a no-op).
+		 *
+		 * If the caller is trying to relocate this release into a DIFFERENT category, they must additionally hold
+		 * core.create AND core.edit on THAT category -- the exact same combination
+		 * ReleaseModel::assertCategoryChangeIsAuthorised() requires authoritatively, and that a batch move of a
+		 * release already requires via ModelCopyTrait::checkCategoryId() + ReleaseModel::onBeforeBatch(). The
+		 * Model-layer check is what actually closes this gap; rejecting here too just saves the round-trip.
+		 */
+		if (array_key_exists('category_id', $data))
+		{
+			$newCategoryId = (int) $data['category_id'];
+
+			if ($newCategoryId && $newCategoryId !== $categoryId)
+			{
+				$user = $this->app->getIdentity();
+
+				if (
+					!$user->authorise('core.create', $this->option . '.category.' . $newCategoryId) ||
+					!$user->authorise('core.edit', $this->option . '.category.' . $newCategoryId)
+				)
+				{
+					return false;
+				}
+			}
+		}
+
+		return true;
 	}
 }

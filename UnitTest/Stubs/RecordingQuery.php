@@ -131,7 +131,14 @@ class RecordingQuery implements QueryInterface
 		return $this;
 	}
 
-	public function bind($key, $value = null, $dataType = null)
+	/**
+	 * `$value` is deliberately by-reference here, exactly like the real
+	 * `Joomla\Database\DatabaseQuery::bind()` it stands in for. PHP raises a fatal
+	 * "Only variables can be passed by reference" for a caller that hands this a non-variable
+	 * expression (e.g. a `(int)` cast). Keeping that constraint here is what makes this stub a real
+	 * regression net for that bug class, rather than silently tolerating it.
+	 */
+	public function bind($key, &$value = null, $dataType = null)
 	{
 		foreach ((array) $key as $index => $singleKey)
 		{

@@ -123,7 +123,32 @@ class AutodescriptionsController extends ApiController
 			return false;
 		}
 
-		return $user->authorise('core.edit', 'com_ars.category.' . $categoryId);
+		if (!$user->authorise('core.edit', 'com_ars.category.' . $categoryId)) {
+			return false;
+		}
+
+		/**
+		 * Defense in depth. Joomla's core ApiController::edit() calls allowEdit() with ONLY [id => $recordId] --
+		 * never the request body -- so $data never carries a submitted category and the check above only ever
+		 * re-authorises the record's CURRENT, pre-edit category. Pull the submitted body the same way allowAdd()
+		 * does, and if it is reassigning this record to a DIFFERENT category, require core.create AND core.edit
+		 * on THAT category too -- the same combination
+		 * AutodescriptionModel::assertCategoryChangeIsAuthorised() requires authoritatively (which is what
+		 * actually closes this gap; this is just an early, cheaper rejection).
+		 */
+		$requestData = $this->getRequestData();
+		$newCategoryId = (int) ($requestData['category'] ?? $requestData['category_id'] ?? $requestData['catid'] ?? 0);
+
+		if ($newCategoryId && $newCategoryId !== $categoryId) {
+			if (
+				!$user->authorise('core.create', 'com_ars.category.' . $newCategoryId) ||
+				!$user->authorise('core.edit', 'com_ars.category.' . $newCategoryId)
+			) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

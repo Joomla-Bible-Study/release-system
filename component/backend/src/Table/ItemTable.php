@@ -83,8 +83,52 @@ class ItemTable extends AbstractTable
 		$this->access     = 1;
 	}
 
+	/**
+	 * Canonicalises a submitted or stored `release_id` to the exact integer this table will persist.
+	 *
+	 * `forms/item.xml`'s `release_id` field now declares `filter="integer"`, so a submission that goes
+	 * through Joomla's own `Form::filter()` -- the backend `FormController::save()` path, and the
+	 * JSON:API `POST`/`PATCH v1/ars/items` path once `ApiController::save()` reaches its own
+	 * `$model->validate($form, $data)` call -- already arrives canonicalised before either of them
+	 * calls `ItemModel::save($data)`. This method exists for what that filter does NOT cover: any code
+	 * that binds data onto this table directly without going through that form (a CLI script, a future
+	 * direct model/table call), and {@see ItemController::allowEdit()} /
+	 * {@see \Akeeba\Component\ARS\Api\Controller\ItemsController::allowEdit()}, both of which read the
+	 * submitted `release_id` BEFORE `Form::filter()` has run on this same request (see their own
+	 * docblocks) -- so, for either of them, a raw non-canonical value could still reach an
+	 * authorisation decision un-normalised without this.
+	 *
+	 * Left un-normalised, a raw fractional string like `'20.99'` reaching `Table::store()` would have
+	 * MySQL's own implicit string-to-int conversion ROUND it when storing it into an int column (e.g.
+	 * `'20.99'` -> 21) rather than TRUNCATE it the way PHP's `(int)` cast does (-> 20) -- letting the
+	 * value actually persisted silently diverge from whatever an authorisation check upstream believed
+	 * it was reasoning about.
+	 *
+	 * {@see onBeforeCheck()} and {@see onBeforeStore()} both apply this SAME cast to
+	 * `$this->release_id` immediately before this table persists anything, and
+	 * {@see \Akeeba\Component\ARS\Administrator\Model\ItemModel::isReleaseChangeAuthorised()} applies
+	 * it to the very same `$data['release_id']` that `AdminModel::save()` goes on to `bind()` onto
+	 * this table within that same call -- so THAT specific comparison can never diverge from what this
+	 * table ends up storing. Mirrors {@see ReleaseTable::voodooOnBeforeStore()}'s `intval()` cast of
+	 * `category_id`, which closes the identical class of bug on the Release path.
+	 *
+	 * @param   mixed  $releaseId
+	 *
+	 * @return  int
+	 * @since   7.0.2
+	 */
+	public static function normalizeReleaseId($releaseId): int
+	{
+		return (int) $releaseId;
+	}
+
 	protected function onBeforeCheck()
 	{
+		// Normalise BEFORE anything below -- including this method's own category-scoped queries --
+		// ever reads release_id. See normalizeReleaseId()'s docblock for why this must happen this
+		// early rather than only immediately before store().
+		$this->release_id = self::normalizeReleaseId($this->release_id);
+
 		// We need a category
 		$this->assertNotEmpty($this->release_id, 'COM_ARS_ITEM_ERR_NEEDS_CATEGORY');
 
@@ -167,8 +211,23 @@ class ItemTable extends AbstractTable
 		// If the publish state is an empty string, null or 0 set it to integer zero, please.
 		$this->published = $this->published ?: 0;
 
-		// Apply an update stream, if possible
-		$this->updatestream = $this->updatestream ?: $this->getUpdateStream();
+		// Apply an update stream, if possible. An EXPLICITLY submitted update stream must belong to this
+		// item's own release/category -- the same category-scoped set getUpdateStream() computes below --
+		// or a per-category delegated editor could bind their item to another product's update stream and
+		// hijack that product's auto-update flow on every site tracking it.
+		if (empty($this->updatestream))
+		{
+			$this->updatestream = $this->getUpdateStream();
+		}
+		else
+		{
+			$updatestream    = (int) $this->updatestream;
+			$categoryStreams = array_map('intval', array_column($this->getCategoryUpdateStreams(), 'id'));
+
+			$this->assert(in_array($updatestream, $categoryStreams, true), 'COM_ARS_ITEM_ERR_INVALID_UPDATESTREAM');
+
+			$this->updatestream = $updatestream;
+		}
 
 		// Update the file size and / or file hashes if they are not already present.
 		if (empty($this->md5) || empty($this->sha1) || empty($this->sha256) || empty($this->sha384) || empty($this->sha512) || empty($this->filesize))
@@ -328,12 +387,19 @@ class ItemTable extends AbstractTable
 	}
 
 	/**
-	 * Returns the applicable update stream ID for the current item
+	 * Returns every update stream applicable to this item's own release/category, unfiltered by packname or
+	 * element matching.
 	 *
-	 * @return  int|null  Update stream ID. NULL when no stream is applicable.
-	 * @since   7.0.0
+	 * This is the security-relevant boundary: it is the full set of update streams an item belonging to this
+	 * item's release/category is allowed to be bound to. {@see getUpdateStream()} additionally filters this
+	 * set by fnmatch pattern to auto-pick the single best candidate; {@see onBeforeCheck()} uses this
+	 * unfiltered set directly to validate an EXPLICITLY submitted update stream, since the category -- not
+	 * the packname pattern -- is what must not be crossed.
+	 *
+	 * @return  object[]  Rows from #__ars_updatestreams (id, packname, element, ...) scoped to this item's category.
+	 * @since   7.0.1
 	 */
-	protected function getUpdateStream(): ?int
+	protected function getCategoryUpdateStreams(): array
 	{
 		$db = $this->getDatabase();
 
@@ -347,7 +413,18 @@ class ItemTable extends AbstractTable
 			->from($db->quoteName('#__ars_updatestreams'))
 			->where($db->quoteName('category') . ' IN (' . $subquery . ')');
 
-		$streams = $db->setQuery($query)->loadObjectList() ?: [];
+		return $db->setQuery($query)->loadObjectList() ?: [];
+	}
+
+	/**
+	 * Returns the applicable update stream ID for the current item
+	 *
+	 * @return  int|null  Update stream ID. NULL when no stream is applicable.
+	 * @since   7.0.0
+	 */
+	protected function getUpdateStream(): ?int
+	{
+		$streams = $this->getCategoryUpdateStreams();
 
 		if (empty($streams))
 		{
@@ -386,6 +463,13 @@ class ItemTable extends AbstractTable
 	protected function onBeforeStore(&$updateNulls)
 	{
 		$this->onBeforeStoreCreateModifyAware($updateNulls);
+
+		// Final, authoritative cast immediately before persistence -- mirrors
+		// ReleaseTable::voodooOnBeforeStore()'s intval() cast of category_id. onBeforeCheck() above
+		// already normalises release_id via the same normalizeReleaseId(), so on the normal
+		// check()-then-store() path this is an idempotent no-op; it exists as a safety net for any
+		// future code path that reaches store() without going through check() first.
+		$this->release_id = self::normalizeReleaseId($this->release_id);
 
 		if (is_array($this->environments))
 		{

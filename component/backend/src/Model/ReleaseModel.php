@@ -341,6 +341,11 @@ class ReleaseModel extends AdminModel
 
 	protected function prepareTable($table)
 	{
+		// A submitted category_id reassigning this EXISTING release to a different category must be authorised
+		// against the destination category, or a per-category delegated editor could relocate their own release
+		// (and every Item under it) into a category they have no rights on. See self::assertCategoryChangeIsAuthorised().
+		$this->assertCategoryChangeIsAuthorised($table);
+
 		// Set up the created / modified date
 		$date  = Factory::getDate();
 		$user  = Factory::getApplication()->getIdentity();
@@ -357,6 +362,83 @@ class ReleaseModel extends AdminModel
 			// Set the values
 			$table->modified    = $date->toSql();
 			$table->modified_by = $user->id;
+		}
+	}
+
+	/**
+	 * Guards against reassigning an EXISTING release to a different category through a plain edit/save, without
+	 * the caller holding rights on the destination category.
+	 *
+	 * {@see \Akeeba\Component\ARS\Administrator\Controller\ReleaseController::allowEdit()} (and its JSON:API
+	 * equivalent) only ever re-authorises the record's CURRENT, pre-edit category -- loaded fresh from the
+	 * database before the submitted data is applied. A `category_id` submitted alongside the edit is never
+	 * inspected by that check, so a user holding core.create/core.edit on category A only could edit their OWN
+	 * release (currently in category A, which authorises fine) while also reassigning its category_id to
+	 * category B. Since {@see ItemTable::onBeforeCheck()}'s update-stream validation is scoped to whatever
+	 * category the release ends up in, this let an attacker bind their release -- and every Item under it -- to
+	 * a victim category's real update stream, reproducing the original cross-tenant supply-chain vulnerability
+	 * through a different field.
+	 *
+	 * This is the authoritative fix: it runs from {@see self::prepareTable()}, which both the plain backend
+	 * form-save path and the JSON:API POST/PATCH v1/ars/releases path funnel through via
+	 * {@see \Joomla\CMS\MVC\Model\AdminModel::save()}, so neither entry point can bypass it. The Controllers'
+	 * `allowEdit()` overrides additionally perform the same check as defense-in-depth, but this Model-layer
+	 * check is what actually closes the gap.
+	 *
+	 * The required permission combination -- core.create AND core.edit on the DESTINATION category -- is not
+	 * arbitrary: it is exactly what a batch MOVE of a release into that category already requires in this
+	 * codebase, via {@see \Akeeba\Component\ARS\Administrator\Mixin\ModelCopyTrait::checkCategoryId()} (core.create)
+	 * and {@see self::onBeforeBatch()}'s default/move branch (core.edit). A plain edit that changes category_id
+	 * is the same operation -- one existing row relocated to a new category -- so it is held to the same bar.
+	 *
+	 * A record whose category_id is left unchanged, or a brand new record (no stored row yet -- allowAdd()
+	 * already authorises that case against the single category being written to), is never checked here, so
+	 * legitimate edits that don't touch the category pay no extra cost regardless of the caller's rights
+	 * elsewhere. When the stored row cannot be read (e.g. it disappeared from under us) the comparison
+	 * deliberately fails to match, so this fails CLOSED into requiring authorisation rather than silently
+	 * skipping the check.
+	 *
+	 * @param   ReleaseTable|object  $table  The table object, already bind()-ed with the submitted data.
+	 *
+	 * @return  void
+	 * @throws  Exception
+	 * @since   7.5.2
+	 */
+	protected function assertCategoryChangeIsAuthorised($table): void
+	{
+		if (!($table instanceof ReleaseTable) || empty($table->id))
+		{
+			return;
+		}
+
+		$newCategoryId = (int) $table->category_id;
+		$recordId      = (int) $table->id;
+
+		$db    = $this->getDatabase();
+		$query = DbQuery::create($db)
+			->select($db->quoteName('category_id'))
+			->from($db->quoteName('#__ars_releases'))
+			->where($db->quoteName('id') . ' = :id')
+			->bind(':id', $recordId, ParameterType::INTEGER);
+
+		$storedCategoryId = $db->setQuery($query)->loadResult();
+		$storedCategoryId = $storedCategoryId !== null ? (int) $storedCategoryId : null;
+
+		if ($storedCategoryId === $newCategoryId)
+		{
+			return;
+		}
+
+		$user = Factory::getApplication()->getIdentity();
+
+		if (!$user->authorise('core.create', 'com_ars.category.' . $newCategoryId))
+		{
+			throw new \RuntimeException(Text::_('JLIB_APPLICATION_ERROR_BATCH_CANNOT_CREATE'));
+		}
+
+		if (!$user->authorise('core.edit', 'com_ars.category.' . $newCategoryId))
+		{
+			throw new \RuntimeException(Text::_('JLIB_APPLICATION_ERROR_BATCH_CANNOT_EDIT'));
 		}
 	}
 

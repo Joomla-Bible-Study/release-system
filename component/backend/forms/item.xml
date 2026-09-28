@@ -21,6 +21,7 @@
                 type="ArsReleases"
                 label="COM_ARS_ITEM_FIELD_RELEASE"
                 required="true"
+                filter="integer"
                 cat_state_key="com_ars.items.filter.category_id"
         >
         </field>
