@@ -58,6 +58,29 @@
             <option value="link">COM_ARS_ITEM_FIELD_TYPE_LINK</option>
         </field>
 
+        <!--
+            The <option> list below is populated dynamically (a directory scan of the release's
+            category folder) purely as a UI convenience for picking an existing file. It is NOT a
+            closed list: ANY string submitted here is accepted by Form::filter()/Form::validate() and
+            reaches ItemTable::onBeforeCheck() unchanged. The authoritative checks against path
+            traversal and stream-wrapper prefixes live in
+            Akeeba\Component\ARS\Administrator\Table\ItemTable::onBeforeCheck() (write-time,
+            string-only screen) and Akeeba\Component\ARS\Administrator\Helper\ItemSecurity
+            (realpath()-based containment check, applied everywhere this value reaches a filesystem
+            read or delete sink). Do not assume this field's shape is enforced just because it looks
+            like a closed list in the backend UI.
+
+            Deliberately WITHOUT a `validate="filePath"` attribute, unlike category.xml's own
+            `directory` field: this field is not `required`, and a link-type item's save routinely
+            submits no `filename` key at all. Joomla's Form::validate() -> FormField::validate() then
+            calls the rule with a bare PHP `null` (`Registry::get()`'s default when a key is absent);
+            it short-circuits an empty/null value only when the field IS required
+            (libraries/src/Form/FormField.php's `if ($required && ($value === '' || $value === null))`
+            check). `Joomla\CMS\Form\Rule\FilePathRule::test()` immediately does `trim($value)`, which
+            raises an E_DEPRECATED on PHP 8.1+ for a null $value; on every JSON:API create/update of
+            a link-type item, corrupting the response body on any site with deprecation notices
+            surfaced to output. Confirmed by reading both methods directly rather than assumed.
+        -->
         <field
                 name="filename"
                 type="list"

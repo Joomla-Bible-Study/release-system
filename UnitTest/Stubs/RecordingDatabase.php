@@ -71,6 +71,23 @@ class RecordingDatabase extends \Joomla\Database\DatabaseDriver
 		return true;
 	}
 
+	/**
+	 * No-op transaction methods. Nothing here needs a real transaction: this stub already commits every
+	 * write instantly (see {@see execute()}), so start/commit/rollback simply have to exist and not
+	 * throw for a model that wraps its writes in one.
+	 */
+	public function transactionStart($asSavepoint = false)
+	{
+	}
+
+	public function transactionCommit($toSavepoint = false)
+	{
+	}
+
+	public function transactionRollback($toSavepoint = false)
+	{
+	}
+
 	public function loadObjectList($key = '', $class = \stdClass::class)
 	{
 		return \is_array($this->result) ? $this->result : [];

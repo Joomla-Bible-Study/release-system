@@ -10,7 +10,10 @@ namespace Akeeba\ARS\UnitTest\Administrator\Table;
 defined('_JEXEC') or die;
 
 use Akeeba\ARS\UnitTest\Stubs\RecordingDatabase;
+use Akeeba\ARS\UnitTest\Stubs\ScriptedHttpClient;
+use Akeeba\ARS\UnitTest\Stubs\ScriptedHttpResponse;
 use Akeeba\ARS\UnitTest\Stubs\ScriptedRecordingDatabase;
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Table\ItemTable;
 use Joomla\CMS\Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -25,9 +28,29 @@ use RuntimeException;
 #[Group('Table')]
 class ItemTableTest extends TestCase
 {
+	/** @var string|null Per-test throwaway tmp_path directory created by fakeApplicationWithTmpPath(). */
+	private ?string $tmpPathDir = null;
+
 	protected function tearDown(): void
 	{
 		Factory::reset();
+
+		// Every test that calls setHttpClientFactoryForTesting() MUST undo it -- it is deliberately
+		// global, mutable state that would otherwise silently leak into whichever test runs next.
+		ItemSecurity::setHttpClientFactoryForTesting(null);
+
+		if ($this->tmpPathDir !== null && is_dir($this->tmpPathDir))
+		{
+			foreach (scandir($this->tmpPathDir) ?: [] as $entry)
+			{
+				if ($entry !== '.' && $entry !== '..')
+				{
+					@unlink($this->tmpPathDir . '/' . $entry);
+				}
+			}
+
+			@rmdir($this->tmpPathDir);
+		}
 
 		parent::tearDown();
 	}
@@ -398,6 +421,231 @@ class ItemTableTest extends TestCase
 		$this->expectException(RuntimeException::class);
 
 		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	// -----------------------------------------------------------------------------------------------------------
+	// onBeforeCheck(): security-audit regression coverage.
+	//
+	// Finding 4 (path traversal): item.filename carries no validate/filter attribute in item.xml --
+	// its visible <option> list is a UI convenience only. isSyntacticallySafeFilename() is a
+	// write-time, string-only screen rejecting the classic traversal/stream-wrapper shapes; the
+	// authoritative containment check (ItemSecurity::resolveContainedFile(), covered in
+	// UnitTest/Administrator/Helper/ItemSecurityTest.php) is applied separately, wherever
+	// item.filename actually reaches a filesystem sink.
+	//
+	// Finding 1 (blind SSRF): item.url used to reach InstallerHelper::downloadPackage() completely
+	// unvalidated whenever a hash field was empty. ItemSecurity::isSafeUrl() (see
+	// ItemSecurityTest for its own exhaustive coverage) must be invoked, and must reject, BEFORE
+	// that call -- these tests pin the WIRING, not the validation logic itself.
+	// -----------------------------------------------------------------------------------------------------------
+
+	public function testOnBeforeCheckRejectsFilenameContainingParentDirectoryTraversal(): void
+	{
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->filename = '../../../../etc/passwd';
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('COM_ARS_ITEM_ERR_UNSAFE_FILENAME');
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	public function testOnBeforeCheckRejectsAnAbsoluteFilename(): void
+	{
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->filename = '/etc/passwd';
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('COM_ARS_ITEM_ERR_UNSAFE_FILENAME');
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	public function testOnBeforeCheckRejectsAStreamWrapperFilename(): void
+	{
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->filename = 'php://filter/resource=index.php';
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('COM_ARS_ITEM_ERR_UNSAFE_FILENAME');
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	/**
+	 * A legitimate filename inside a sub-directory (the item-filename picker recurses into the
+	 * category folder's sub-directories) must NOT be rejected by the write-time screen.
+	 */
+	public function testOnBeforeCheckAcceptsALegitimateNestedFilename(): void
+	{
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->filename = 'sub/dir/package.zip';
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame('sub/dir/package.zip', $item->filename);
+	}
+
+	/**
+	 * A fake application whose get('tmp_path') resolves to a fresh, per-test, throwaway directory
+	 * (cleaned up in tearDown()) so onBeforeCheck() can reach the SSRF guard. Deliberately NOT
+	 * `sys_get_temp_dir()` itself: onBeforeCheck()'s hash-computation branch, once the fetch has run,
+	 * ends by `@unlink()`-ing `$target` (`tmp_path . '/temp.dat'`) for a type='link' item -- pointing
+	 * that at the shared system temp directory would risk deleting an unrelated `temp.dat` some other
+	 * process happens to have left there.
+	 */
+	private function fakeApplicationWithTmpPath(): string
+	{
+		$this->tmpPathDir = sys_get_temp_dir() . '/ars-itemtable-test-' . bin2hex(random_bytes(8));
+
+		mkdir($this->tmpPathDir, 0777, true);
+
+		Factory::$application = new class ($this->tmpPathDir) {
+			public function __construct(private string $tmpPath)
+			{
+			}
+
+			public function get($key, $default = null)
+			{
+				return $key === 'tmp_path' ? $this->tmpPath : $default;
+			}
+
+			public function getIdentity()
+			{
+				return null;
+			}
+		};
+
+		return $this->tmpPathDir;
+	}
+
+	public function testOnBeforeCheckRejectsAnUnsafeUrlBeforeAttemptingTheDownload(): void
+	{
+		$this->fakeApplicationWithTmpPath();
+
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->type     = 'link';
+		$item->filename = '';
+		$item->url      = 'http://169.254.169.254/latest/meta-data/'; // cloud metadata endpoint
+		$item->md5      = ''; // forces the hash/SSRF-guarded branch to run
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('COM_ARS_ITEM_ERR_UNSAFE_URL');
+
+		$this->invokeProtected($item, 'onBeforeCheck');
+	}
+
+	/**
+	 * A safe, public URL must be let through to the download call -- the guard must not false-positive
+	 * on ordinary input. `ItemSecurity::setHttpClientFactoryForTesting()` stands in for the real
+	 * `Joomla\Http\HttpFactory` (not installed in this unit test environment) with a scripted client, so
+	 * this exercises the REAL fetch-and-write-then-hash code path in onBeforeCheck(), not a bypassed one.
+	 */
+	public function testOnBeforeCheckAllowsASafePublicUrlToReachTheDownloadCall(): void
+	{
+		$this->fakeApplicationWithTmpPath();
+
+		ItemSecurity::setHttpClientFactoryForTesting(
+			fn() => new ScriptedHttpClient([new ScriptedHttpResponse(200, 'package bytes')])
+		);
+
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->type     = 'link';
+		$item->filename = '';
+		$item->url      = 'https://8.8.8.8/updates/package.zip'; // public IP literal, no DNS needed
+		$item->md5      = '';
+		$item->sha256   = '';
+
+		// Must complete without throwing at all -- in particular, must not throw
+		// COM_ARS_ITEM_ERR_UNSAFE_URL for a URL that is, in fact, safe.
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame('', $item->filename);
+		// The fetched bytes must actually have reached the hasher -- this is the "ordinary case" the
+		// fix must not break: a normal public URL, with no redirect at all, still gets its checksums
+		// computed from the real response body.
+		$this->assertSame(hash('sha256', 'package bytes'), $item->sha256);
+	}
+
+	/**
+	 * Gap 1, the main fix of this round: item.url is validated with isSafeUrl() before the fetch starts,
+	 * but the URL itself redirects to a private address. Before this fix, ItemTable::onBeforeCheck()
+	 * fetched through Joomla core's InstallerHelper::downloadPackage(), which follows every redirect
+	 * transparently inside a single curl call with no hook to re-validate a hop -- so the private
+	 * target's response would have been fetched and its checksums silently persisted onto the item. This
+	 * pins the fix AT THE ItemTable SAVE PATH specifically (ItemModel::downloadLinkItem()'s equivalent
+	 * fetch is covered separately in ItemModelLinkSecurityTest.php / ItemSecurityTest.php), asserting the
+	 * strongest possible thing: the private redirect target is never even requested.
+	 */
+	public function testOnBeforeCheckNeverRequestsAnInternalRedirectTargetOfItemUrl(): void
+	{
+		$this->fakeApplicationWithTmpPath();
+
+		$client = new ScriptedHttpClient([
+			new ScriptedHttpResponse(302, '', ['Location' => 'http://10.0.0.5/secret']),
+			// Never legitimately reached; present only so a regression that DID follow the redirect
+			// would still produce a detectably wrong (rather than merely absent) checksum.
+			new ScriptedHttpResponse(200, 'internal service response'),
+		]);
+		ItemSecurity::setHttpClientFactoryForTesting(fn() => $client);
+
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->type     = 'link';
+		$item->filename = '';
+		$item->url      = 'https://8.8.8.8/updates/package.zip'; // safe at validation time...
+		$item->md5      = '';
+		$item->sha256   = '';
+
+		// ...but the save must still complete without throwing: an unsafe REDIRECT is not the same as
+		// an unsafe INITIAL url, and onBeforeCheck() treats a failed/refused fetch the same way it
+		// always treated InstallerHelper::downloadPackage() returning false -- silently, with no hashes.
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame(
+			['https://8.8.8.8/updates/package.zip'],
+			$client->requestedUrls,
+			'The private redirect target must never actually be requested.'
+		);
+		// Never derived from the internal service's response -- and, in particular, not the hash of
+		// 'internal service response', which is what a regression back to unconditional redirect-
+		// following would produce.
+		$this->assertNotSame(hash('sha256', 'internal service response'), $item->sha256);
+		$this->assertSame('', $item->sha256, 'No response was ever safely fetched, so no hash should exist.');
+	}
+
+	/**
+	 * Regression guard for a behaviour change the redirect fix could easily have introduced:
+	 * InstallerHelper::downloadPackage() caught `\RuntimeException` from a connection failure
+	 * (refused, TLS failure, DNS failure, timeout, ...) and returned false, silently. A save for an
+	 * otherwise-safe URL whose host merely happens to be temporarily unreachable must still succeed
+	 * without hashes, exactly as before -- it must NOT now fail the save outright with an uncaught
+	 * exception. `Joomla\Http\Transport\Curl::request()` throws exactly `\RuntimeException` on such a
+	 * failure (confirmed empirically against a real closed port through the real transport), which is
+	 * what this fake client reproduces.
+	 */
+	public function testOnBeforeCheckToleratesAConnectionFailureTheSameWayDownloadPackageDidNotThrow(): void
+	{
+		$this->fakeApplicationWithTmpPath();
+
+		ItemSecurity::setHttpClientFactoryForTesting(fn() => new class {
+			public function get(string $url): never
+			{
+				throw new RuntimeException('Failed to connect: Could not connect to server');
+			}
+		});
+
+		$item           = $this->baselineItem($this->emptyScriptedDb());
+		$item->type     = 'link';
+		$item->filename = '';
+		$item->url      = 'https://8.8.8.8/updates/package.zip'; // safe at validation time; host is unreachable
+		$item->md5      = '';
+		$item->sha256   = '';
+
+		// Must NOT throw: a connection failure during the fetch is not the same as an unsafe url, and
+		// must be tolerated exactly the way downloadPackage() tolerated it.
+		$this->invokeProtected($item, 'onBeforeCheck');
+
+		$this->assertSame('', $item->sha256, 'No response was ever fetched, so no hash should exist.');
 	}
 
 	// -----------------------------------------------------------------------------------------------------------

@@ -19,6 +19,7 @@ use DateTimeZone;
 use Exception;
 use Joomla\CMS\Component\ComponentHelper;
 use Joomla\CMS\Date\Date;
+use Joomla\CMS\Log\Log;
 use Joomla\CMS\MVC\Model\BaseDatabaseModel;
 use Joomla\Database\DatabaseDriver;
 use Joomla\Database\ParameterType;
@@ -264,9 +265,14 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		// Then, delete the actual filesystem directories
 		$basePath = $this->getDirectoryPath($category);
 
+		if (empty($basePath))
+		{
+			return;
+		}
+
 		foreach ($results as $version)
 		{
-			$this->recursiveRmdir($basePath . DIRECTORY_SEPARATOR . $version);
+			$this->removeReleaseDirectory($basePath, $version);
 		}
 	}
 
@@ -330,9 +336,155 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		// Then, delete the actual filesystem directories
 		$basePath = $this->getDirectoryPath($category);
 
+		if (empty($basePath))
+		{
+			return;
+		}
+
 		foreach ($results as $version)
 		{
-			$this->recursiveRmdir($basePath . DIRECTORY_SEPARATOR . $version);
+			$this->removeReleaseDirectory($basePath, $version);
+		}
+	}
+
+	/**
+	 * Safely deletes a Bleeding Edge release's directory, given its (untrusted) version string.
+	 *
+	 * `#__ars_releases`.`version` reaches this call with NO path-safety validation on its write path
+	 * (see `ReleaseTable::onBeforeCheck()`, which only asserts it's non-empty) -- unlike a category's own
+	 * `directory` column, which `CategoryTable::onBeforeCheck()` constrains with `validate="filePath"`
+	 * plus `Joomla\Filesystem\Path::check()` against `JPATH_SITE`. Without this method, a version of
+	 * `'..'` would turn `$basePath . DIRECTORY_SEPARATOR . $version` into `dirname($basePath)`, and a
+	 * deeper `'../../..'` would climb further still, with `recursiveRmdir()` then recursively deleting
+	 * whatever that resolved to -- up to and including `JPATH_ROOT` itself when the category directory is
+	 * an ordinary top-level folder.
+	 *
+	 * The check is structural, not a blocklist of '..' or '/' characters: `$basePath` is canonicalised
+	 * with `realpath()` FIRST, on its own, before `$version` enters the picture at all. Only then is
+	 * `$version` required to be a single, literal path-segment name -- non-empty, not '.'/'..', and
+	 * containing no directory separator (forward OR back slash) -- and only a value meeting that
+	 * requirement is ever appended to the now-trusted, already-canonical base and handed to a
+	 * filesystem primitive. That ordering matters: `is_link()`/`unlink()`/`realpath()` all resolve
+	 * every path segment up to the last one, so calling any of them on `$basePath . '/' . $version`
+	 * BEFORE ruling out separators in `$version` would let a value like `'../evil-link'` (or
+	 * `'fake/.'`, to defeat an `is_link()` check on a sibling symlink) walk back out through
+	 * `$basePath`'s real, trusted parent directories using an attacker-chosen final path component --
+	 * turning "detect a planted symlink" into "delete or read an arbitrary symlink the web user can
+	 * reach", with no filesystem write access of its own required. Once `$version` is confirmed to be a
+	 * bare name, `$realBase . DIRECTORY_SEPARATOR . $version` can only ever refer to a direct child slot
+	 * of `$realBase` (something that exists there, or nothing) -- so `realpath()` on THAT is finally
+	 * safe to run, and the target is accepted only when it resolves to a real, existing entry whose
+	 * canonical PARENT is exactly `$realBase`. No value `$version` could hold -- multiple traversal
+	 * segments, an absolute-path override, a name that merely contains '..' as a substring (e.g. a real
+	 * release called `1..2`), or a nonexistent path -- can produce a canonical target whose parent isn't
+	 * `$basePath`'s own canonical form, other than an actual, legitimate, existing immediate
+	 * subdirectory of it.
+	 *
+	 * The bare-name entry is also checked for being a symlink BEFORE `realpath()` runs on it, and if so
+	 * is removed as the link, never followed: otherwise a link directly inside `$basePath` pointing at a
+	 * SIBLING release directory (also inside `$basePath`) would resolve straight through and legitimately
+	 * pass containment, letting this delete an unrelated release "by proxy". Planting such a link
+	 * requires out-of-band filesystem write access to the configured Bleeding Edge directory -- the same
+	 * precondition as the lower-priority symlink finding covered by the `isLink()` guards in
+	 * `recursiveRmdir()`, `scanDirectory()`, `scanSubdirectory()` and `extractChangelog()` -- but costs
+	 * nothing to close here too.
+	 *
+	 * @param   string  $basePath  The category's already-validated Bleeding Edge directory.
+	 * @param   string  $version   The untrusted version string driving the deletion target.
+	 *
+	 * @return  void
+	 * @since   __DEPLOY_VERSION__
+	 */
+	private function removeReleaseDirectory(string $basePath, string $version): void
+	{
+		try
+		{
+			$realBase = @realpath($basePath);
+		}
+		catch (Throwable)
+		{
+			// realpath() on some platforms raises (e.g. on an embedded NUL byte) rather than returning
+			// false. Either way, fail closed: treat it exactly like an unresolvable path below.
+			$realBase = false;
+		}
+
+		// $version must be a single, literal path-segment name. This is NOT the containment check --
+		// a bare name that happens to be a real subdirectory of $basePath is still perfectly legitimate,
+		// '1..2' included -- it only makes it safe to then call is_link()/realpath() on
+		// "$realBase/$version" below at all, by guaranteeing that string cannot itself walk anywhere.
+		$isBareSegment = $version !== '' && $version !== '.' && $version !== '..'
+			&& !str_contains($version, '/') && !str_contains($version, '\\') && !str_contains($version, "\0");
+
+		if ($realBase === false || !$isBareSegment)
+		{
+			$this->logRejectedBleedingEdgeDelete($basePath, $version, $basePath . DIRECTORY_SEPARATOR . $version);
+
+			return;
+		}
+
+		$entry = $realBase . DIRECTORY_SEPARATOR . $version;
+
+		try
+		{
+			if (@is_link($entry))
+			{
+				if (!@unlink($entry))
+				{
+					@rmdir($entry);
+				}
+
+				return;
+			}
+
+			$realTarget = @realpath($entry);
+		}
+		catch (Throwable)
+		{
+			$realTarget = false;
+		}
+
+		// dirname() of the canonicalised target must be EXACTLY the canonicalised base -- i.e. the target
+		// is a real, existing, immediate child of it. Anything else (doesn't exist, or -- impossible in
+		// practice once $entry is a bare name under $realBase, but checked anyway -- resolves elsewhere)
+		// is rejected.
+		if ($realTarget === false || dirname($realTarget) !== $realBase)
+		{
+			$this->logRejectedBleedingEdgeDelete($basePath, $version, $entry);
+
+			return;
+		}
+
+		$this->recursiveRmdir($realTarget);
+	}
+
+	/**
+	 * Logs a rejected Bleeding Edge deletion attempt, if this Joomla installation's logger is available.
+	 *
+	 * @param   string  $basePath  The category's Bleeding Edge directory.
+	 * @param   string  $version   The rejected version string.
+	 * @param   string  $target    The concatenated (not necessarily resolvable) path that was rejected.
+	 *
+	 * @return  void
+	 * @since   __DEPLOY_VERSION__
+	 */
+	private function logRejectedBleedingEdgeDelete(string $basePath, string $version, string $target): void
+	{
+		try
+		{
+			Log::add(
+				sprintf(
+					'Refused to delete Bleeding Edge release directory: version "%s" (target "%s") is not a direct child of the category directory "%s".',
+					$version,
+					$target,
+					$basePath
+				),
+				Log::WARNING,
+				'com_ars'
+			);
+		}
+		catch (Throwable)
+		{
+			// No-op: logging is a nice-to-have and must never be a reason to change behaviour or crash.
 		}
 	}
 
@@ -346,6 +498,15 @@ final class BleedingedgeModel extends BaseDatabaseModel
 	 */
 	private function recursiveRmdir(string $path): bool
 	{
+		// A symlink is removed as itself; it is never traversed as if it were a real directory (see
+		// removeReleaseDirectory()'s docblock for why this matters even for an already-contained path).
+		if (@is_link($path))
+		{
+			$removed = @unlink($path);
+
+			return $removed || @rmdir($path);
+		}
+
 		if (!@is_dir($path))
 		{
 			return false;
@@ -362,9 +523,25 @@ final class BleedingedgeModel extends BaseDatabaseModel
 					continue;
 				}
 
+				$itemPath = $item->getPathname();
+
+				// DirectoryIterator::isDir()/isFile() both follow symlinks, so without this check a
+				// symlink planted inside the tree being deleted (requires prior out-of-band filesystem
+				// write access -- see removeReleaseDirectory()) would have its TARGET recursively deleted
+				// instead of just the link entry itself.
+				if ($item->isLink())
+				{
+					if (!@unlink($itemPath))
+					{
+						@rmdir($itemPath);
+					}
+
+					continue;
+				}
+
 				if ($item->isDir())
 				{
-					if (!$this->recursiveRmdir($item->getPathname()))
+					if (!$this->recursiveRmdir($itemPath))
 					{
 						return false;
 					}
@@ -372,11 +549,11 @@ final class BleedingedgeModel extends BaseDatabaseModel
 					continue;
 				}
 
-				if (!@unlink($item->getPathname()))
+				if (!@unlink($itemPath))
 				{
 					try
 					{
-						File::delete($item->getPathname());
+						File::delete($itemPath);
 					}
 					catch (Throwable $e)
 					{
@@ -444,7 +621,11 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		/** @var \DirectoryIterator $dir */
 		foreach ($di as $dir)
 		{
-			if ($dir->isDot() || !$dir->isDir())
+			// isDir() follows symlinks; skipping a symlinked "release" here means a link planted inside
+			// the Bleeding Edge directory (requires prior out-of-band filesystem write access) can never
+			// be auto-published as a release in the first place. Not one of the three methods the audit
+			// finding names, but the same gap and the same fix -- see removeReleaseDirectory()'s docblock.
+			if ($dir->isDot() || $dir->isLink() || !$dir->isDir())
 			{
 				continue;
 			}
@@ -474,7 +655,10 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		/** @var \DirectoryIterator $file */
 		foreach ($di as $file)
 		{
-			if ($file->isDot() || !$file->isFile())
+			// isFile() follows symlinks; skipping a symlinked entry here means a link planted inside a
+			// release directory (requires prior out-of-band filesystem write access) can never be
+			// auto-published as a downloadable item pointing outside the release tree.
+			if ($file->isDot() || $file->isLink() || !$file->isFile())
 			{
 				continue;
 			}
@@ -557,7 +741,10 @@ final class BleedingedgeModel extends BaseDatabaseModel
 		{
 			$path = $releaseDir . DIRECTORY_SEPARATOR . $candidate;
 
-			if (@is_file($path))
+			// is_file() follows symlinks; refusing to read through one here means a CHANGELOG symlink
+			// planted inside the release directory (requires prior out-of-band filesystem write access)
+			// can't be used to render an arbitrary file elsewhere on disk as HTML release notes.
+			if (@is_file($path) && !@is_link($path))
 			{
 				$file = $path;
 				break;

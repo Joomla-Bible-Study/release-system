@@ -9,6 +9,7 @@ namespace Akeeba\Component\ARS\Api\Controller;
 
 defined('_JEXEC') || die;
 
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Table\ItemTable;
 use Akeeba\Component\ARS\Api\Controller\Mixin\AssertApiAccess;
 use Akeeba\Component\ARS\Api\Controller\Mixin\PopulateModelState;
@@ -222,10 +223,18 @@ class ItemsController extends ApiController
 			return '';
 		}
 
-		if (!is_file($folder . '/' . $item->filename)) {
+		// Containment check against path traversal: item.filename is attacker-influenced (any
+		// caller with core.manage+core.delete on the item's category can set it) and item.xml
+		// enforces nothing server-side on it. This is the SAME check ItemModel::preDownloadCheck()
+		// and ItemModel::downloadFileItem() apply on the read path -- see
+		// ItemSecurity::resolveContainedFile()'s docblock -- so "safe" cannot drift between reading
+		// a file and deleting one.
+		$resolved = ItemSecurity::resolveContainedFile($folder, $item->filename);
+
+		if ($resolved === null || !is_file($resolved)) {
 			return '';
 		}
 
-		return $folder . '/' . $item->filename;
+		return $resolved;
 	}
 }

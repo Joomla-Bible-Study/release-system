@@ -10,6 +10,7 @@ namespace Akeeba\Component\ARS\Administrator\Table;
 defined('_JEXEC') or die;
 
 use Akeeba\Component\ARS\Administrator\Helper\DbQuery;
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Mixin\TableAssertionTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\TableColumnAliasTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\TableCreateModifyTrait;
@@ -18,9 +19,9 @@ use Joomla\CMS\Factory;
 use Joomla\Filesystem\File;
 use Joomla\Filesystem\Folder;
 use Joomla\CMS\Filter\InputFilter;
-use Joomla\CMS\Installer\InstallerHelper;
 use Joomla\Database\DatabaseDriver;
 use Joomla\Database\DatabaseInterface;
+use Joomla\Database\ParameterType;
 
 /**
  * ARS Items table
@@ -140,6 +141,18 @@ class ItemTable extends AbstractTable
 		{
 			case 'file':
 				$this->assertNotEmpty($this->filename, 'COM_ARS_ITEM_ERR_NEEDS_FILENAME');
+
+				// Defense in depth against path traversal / stream-wrapper filenames. `item.xml`'s
+				// `filename` field is a `type="list"` whose visible <option> list is populated by a
+				// directory scan for UI convenience ONLY -- it is not itself a form of validation, and
+				// any value at all can still be submitted. This is a cheap, string-only screen; the
+				// AUTHORITATIVE check is ItemSecurity::resolveContainedFile(), applied wherever
+				// item.filename actually reaches a filesystem sink (see that method's docblock).
+				$this->assert(
+					ItemSecurity::isSyntacticallySafeFilename($this->filename),
+					'COM_ARS_ITEM_ERR_UNSAFE_FILENAME'
+				);
+
 				$this->url = '';
 				break;
 
@@ -267,16 +280,92 @@ class ItemTable extends AbstractTable
 
 					if (!empty($folder))
 					{
-						$filename = $folder . '/' . $this->filename;
+						// Same containment check applied to every other read of item.filename (see
+						// ItemSecurity::resolveContainedFile()'s docblock) -- without it, a traversal
+						// filename would have hash_file()/filesize() below run against an arbitrary
+						// file elsewhere on disk and its hashes persisted as this item's checksums.
+						$filename = ItemSecurity::resolveContainedFile($folder, $this->filename);
 					}
 				}
 			}
 
 			if (($this->type == 'link') || !empty($this->url))
 			{
-				$target = Factory::getApplication()->get('tmp_path') . '/temp.dat';
-				InstallerHelper::downloadPackage($this->url, $target);
-				$filename = $target;
+				// Only re-run the SSRF check (and the live fetch below) when item.url is actually
+				// NEW or CHANGING for this row. onBeforeCheck() runs on every store(), including
+				// ones that never touch url at all -- an access-level batch change, a publish
+				// toggle, a category move. Without this guard, a row whose url simply doesn't
+				// resolve any more (temporary DNS trouble, or a stored value like the
+				// RFC 2606 example/test domains that never resolve) would fail this assert() on
+				// EVERY future save forever, since the hashes below never populate and this block
+				// keeps re-attempting them -- turning a one-time "reject this URL at the point it's
+				// set" check into a permanent lock on unrelated edits, including ones a caller with
+				// no rights over url has no way to fix. A brand new row (empty id) has no stored
+				// value to compare against, so it is always treated as changing.
+				$urlHasChanged = true;
+
+				if (!empty($this->id))
+				{
+					$storedUrl = $db->setQuery(
+						DbQuery::create($db)
+							->select($db->quoteName('url'))
+							->from($db->quoteName('#__ars_items'))
+							->where($db->quoteName('id') . ' = :id')
+							->bind(':id', $this->id, ParameterType::INTEGER)
+					)->loadResult();
+
+					$urlHasChanged = ($storedUrl === null) || ($storedUrl !== $this->url);
+				}
+
+				if ($urlHasChanged)
+				{
+					// SSRF guard: item.url is admin-controlled (core.create/core.edit on the item's
+					// category is enough to set it) and this is a server-side fetch performed on every
+					// save. Restrict to http(s) and reject any resolved IP in a loopback/private/
+					// link-local/unspecified/multicast/CGNAT/etc. range -- this is what stops a blind
+					// fetch of something like http://169.254.169.254/ (cloud instance metadata). See
+					// ItemSecurity::isSafeUrl()'s docblock for the residual DNS-rebinding risk this
+					// cannot close.
+					$this->assert(ItemSecurity::isSafeUrl($this->url), 'COM_ARS_ITEM_ERR_UNSAFE_URL');
+
+					// This used to call Joomla core's InstallerHelper::downloadPackage(), which follows
+					// EVERY HTTP redirect (301/302/303/307/308) transparently inside a single curl call
+					// (CURLOPT_FOLLOWLOCATION), with no hook for the isSafeUrl() check above to see, let
+					// alone re-validate, the address any hop actually lands on -- an attacker-controlled
+					// URL that looks safe could redirect straight to an internal service and have its
+					// response's checksums silently persisted onto this item. Fetching through this
+					// shared mechanism instead re-validates every redirect hop with isSafeUrl() before
+					// following it -- see ItemSecurity::fetchUrlFollowingOnlySafeRedirects()'s docblock,
+					// and ItemModel::downloadLinkItem(), the other SSRF sink that fetches the exact same
+					// way for the exact same reason.
+					$target = Factory::getApplication()->get('tmp_path') . '/temp.dat';
+
+					try
+					{
+						// downloadPackage() caught exactly this (connection refused, TLS failure, DNS
+						// failure, timeout, ...) and returned false, letting a save for an otherwise-safe
+						// URL whose host is merely temporarily unreachable continue without hashes rather
+						// than fail outright. fetchUrlFollowingOnlySafeRedirects() has no such catch of its
+						// own (ItemModel::downloadLinkItem() -- the other caller -- always lets this
+						// propagate, unchanged from before this round, per the task's own requirement not
+						// to alter ItemModel's behaviour), so this call site must catch it itself to keep
+						// that same "temporarily unreachable host" case non-fatal for a save.
+						$response = ItemSecurity::fetchUrlFollowingOnlySafeRedirects($this->url);
+
+						if ($response->statusCode === 200)
+						{
+							File::write($target, $response->body);
+						}
+					}
+					catch (\RuntimeException $e)
+					{
+						// Swallow, exactly as InstallerHelper::downloadPackage() did: $target is left
+						// unwritten, so the file_exists() check below finds nothing and this save proceeds
+						// without hashes, same as any other failed fetch.
+					}
+
+					$filename = $target;
+				}
 			}
 
 			if (!empty($filename) && (!@file_exists($filename) || !@is_file($filename)))

@@ -903,6 +903,62 @@ namespace Joomla\CMS {
 	}
 }
 
+namespace Joomla\CMS\Log {
+	/**
+	 * Stand-in for Joomla\CMS\Log\Log. `add()` never writes anywhere -- it only appends to
+	 * {@see Log::$entries}, so a test can assert that a log call happened, and with what message,
+	 * priority and category, without any real logger configuration. Call {@see Log::reset()} in
+	 * tearDown(): the suite runs with beStrictAboutChangesToGlobalState, and this is global state.
+	 */
+	if (!class_exists(Log::class, false))
+	{
+		class Log
+		{
+			public const EMERGENCY = 0;
+
+			public const ALERT = 1;
+
+			public const CRITICAL = 2;
+
+			public const ERROR = 3;
+
+			public const WARNING = 4;
+
+			public const NOTICE = 5;
+
+			public const INFO = 6;
+
+			public const DEBUG = 7;
+
+			public const ALL = 15;
+
+			/** @var array<int, array{message: string, priority: mixed, category: string}> */
+			public static array $entries = [];
+
+			public static function add($entry, $priority = self::INFO, $category = ''): bool
+			{
+				self::$entries[] = [
+					'message'  => (string) $entry,
+					'priority' => $priority,
+					'category' => $category,
+				];
+
+				return true;
+			}
+
+			public static function addLogger(array $options = [], $priorities = self::ALL, $categories = [], $exclude = false): void
+			{
+				// No-op: this test suite never writes an actual log file.
+			}
+
+			public static function reset(): void
+			{
+				self::$entries = [];
+			}
+		}
+	}
+}
+
 namespace Joomla\CMS\Table {
 	if (!interface_exists(TableInterface::class, false))
 	{

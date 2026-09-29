@@ -663,6 +663,14 @@ writeRepositoryFile($repoRoot, 'e2e-bleedingedge/2.0.0/payload.bin', 'ARS-E2E-SE
  * compose network, so the redirect-based download tests (url_dl = temp/permanent) assert the
  * Location header without following it, while the proxied path (url_dl = proxy) is fetched
  * server-side, from inside the container, and genuinely round-trips through this file.
+ *
+ * `http://web/...` is exactly the shape ItemSecurity::isSafeUrl() exists to reject at save time (a
+ * hostname that resolves to a private, container-network address) — so this row can no longer be
+ * INSERTED with that URL through the normal ItemTable::onBeforeCheck() path. It is set to a safe
+ * placeholder in $itemSpecs below, saved normally like every other item, and then corrected to the
+ * real in-network URL via a raw UPDATE right after the item-provisioning loop — deliberately becoming
+ * the "already-existing legacy data" case ItemModel::downloadLinkItem()'s download-time guard exists
+ * to handle, exercised here on purpose rather than by accident.
  */
 $linkTargetFile = writeRepositoryFile(JPATH_SITE, 'e2e-link-target.txt', 'ARS-E2E-SENTINEL-linkTarget', 256);
 
@@ -1082,7 +1090,11 @@ $itemSpecs = [
 		'title' => '', 'description' => '', 'environments' => [],
 	],
 	'publicLink'                => [
-		'release' => 'publicStable', 'type' => 'link', 'filename' => '', 'url' => 'http://web/e2e-link-target.txt',
+		// 'url' is a placeholder here, not the real fixture value -- see the raw UPDATE right after this
+		// loop for why. It only needs to be a real http(s) URL that ItemSecurity::isSafeUrl() accepts, so
+		// ItemTable::onBeforeCheck()'s save-time SSRF check (which fetches it to compute checksums) has
+		// something legitimate to fetch during THIS insert.
+		'release' => 'publicStable', 'type' => 'link', 'filename' => '', 'url' => 'https://example.com/e2e-link-placeholder.txt',
 		'access' => 1, 'published' => 1, 'size' => null,
 		'title' => 'E2E Public Link', 'description' => '<p>E2E link item.</p>', 'environments' => $envIds,
 	],
@@ -1181,6 +1193,22 @@ foreach ($itemSpecs as $key => $spec)
 
 	$items[$key] = (int) $table->id;
 }
+
+/**
+ * Correct 'publicLink' from its safe placeholder to the real in-network URL, via a raw UPDATE that
+ * bypasses ItemTable::onBeforeCheck() entirely — see the comment above the $itemSpecs entry above for
+ * why this row cannot be saved through the normal Table path with its real URL.
+ */
+$linkItemUrl = 'http://web/e2e-link-target.txt';
+
+$db->setQuery(
+	$db->createQuery()
+		->update($db->quoteName('#__ars_items'))
+		->set($db->quoteName('url') . ' = :url')
+		->where($db->quoteName('id') . ' = :id')
+		->bind(':url', $linkItemUrl)
+		->bind(':id', $items['publicLink'], ParameterType::INTEGER)
+)->execute();
 
 $files['linkTarget'] = $linkTargetFile;
 

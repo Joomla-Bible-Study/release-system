@@ -10,6 +10,7 @@ namespace Akeeba\Component\ARS\Site\Model;
 defined('_JEXEC') or die;
 
 use Akeeba\Component\ARS\Administrator\Helper\DbQuery;
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Mixin\RunPluginsTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\TableAssertionTrait;
 use Akeeba\Component\ARS\Administrator\Table\CategoryTable;
@@ -31,7 +32,6 @@ use Joomla\CMS\Uri\Uri;
 use Joomla\CMS\User\User;
 use Joomla\CMS\User\UserFactoryInterface;
 use Joomla\Database\ParameterType;
-use Joomla\Http\HttpFactory;
 use Joomla\Http\Response;
 use Laminas\Diactoros\StreamFactory;
 use RuntimeException;
@@ -99,11 +99,18 @@ class ItemModel extends BaseDatabaseModel
 				throw new RuntimeException();
 			}
 
-			$filename = $folder . '/' . $item->filename;
+			// Containment check against path traversal: item.filename is admin-controlled and
+			// item.xml enforces nothing server-side on it (its <option> list is a UI convenience
+			// only). Resolves and canonicalises with realpath() and verifies the result never
+			// escapes $folder -- see ItemSecurity::resolveContainedFile()'s docblock, which is the
+			// SAME check applied in downloadFileItem() below and in the JSON:API's
+			// ItemsController::getFileNameToDelete(), so "safe" cannot drift between reading a file
+			// and deleting one.
+			$resolvedFilename = ItemSecurity::resolveContainedFile($folder, $item->filename);
 
 			try
 			{
-				$fileExists = @is_file($filename);
+				$fileExists = ($resolvedFilename !== null) && @is_file($resolvedFilename);
 			}
 			catch (Exception $e)
 			{
@@ -389,10 +396,22 @@ class ItemModel extends BaseDatabaseModel
 			return;
 		}
 
+		// SSRF guard: item.url is admin-controlled, and in 'proxy' mode THIS is a server-side fetch
+		// whose full response body is streamed back to any anonymous visitor requesting the
+		// download -- non-blind, unlike the save-time fetch in ItemTable::onBeforeCheck(), but the
+		// SAME validation function, so a URL judged safe there and here can never disagree. The actual
+		// fetch below also goes through the SAME shared mechanism as ItemTable::onBeforeCheck() now
+		// does -- see ItemSecurity::fetchUrlFollowingOnlySafeRedirects() -- so EVERY redirect hop is
+		// re-validated with this same function too, in both places identically.
+		if (!ItemSecurity::isSafeUrl($item->url))
+		{
+			throw new RuntimeException('The download item is temporarily unavailable.');
+		}
+
 		// Get the basic information of the file we need to download
 		$uri         = new Uri($item->url);
 		$header_file = basename($uri->getPath());
-		$cacheId     = 'dl_' . sha1($header_file . '#:#' . $app->get('secret'));
+		$cacheId     = $this->buildLinkCacheId($item, $app->get('secret'));
 
 		// Get the applicable cache time for the download item.
 		$cacheTime = (function () use ($cParams) {
@@ -422,17 +441,7 @@ class ItemModel extends BaseDatabaseModel
 		);
 
 		// Get a cached object for the remote item from the cache.
-		$callable      = function (string $url) {
-			// We cannot serialise a PSR-7 Response object, hence the need for this conversion.
-			$response = (new HttpFactory())->getHttp(['follow_location' => 1], ['curl', 'stream'])
-				->get($url);
-
-			return (object) [
-				'body'       => (string) $response->getBody() ?? '',
-				'statusCode' => $response->getStatusCode() ?? 200,
-				'headers'    => $response->getHeaders() ?? [],
-			];
-		};
+		$callable      = fn(string $url) => ItemSecurity::fetchUrlFollowingOnlySafeRedirects($url);
 		/** @noinspection PhpParamsInspection */
 		$responseData = $cacheController->get($callable, $item->url, $cacheId);
 
@@ -648,6 +657,26 @@ class ItemModel extends BaseDatabaseModel
 	}
 
 	/**
+	 * Builds the cache key `downloadLinkItem()` caches a remote fetch's response under.
+	 *
+	 * Includes the item's OWN id and its full url, not just the url's basename: two different items
+	 * whose target URLs happen to share a final path segment (e.g. `/premium/release.zip` vs.
+	 * `/free/release.zip`) must never collide on the same cache entry -- whichever got cached first
+	 * would otherwise be served to requesters of EITHER item, including a guest authorised only for
+	 * the lower-privilege one.
+	 *
+	 * @param   ItemTable  $item    The item being downloaded.
+	 * @param   string     $secret  The site secret (`$app->get('secret')`), as before this method existed.
+	 *
+	 * @return  string
+	 * @since   __DEPLOY_VERSION__
+	 */
+	private function buildLinkCacheId(ItemTable $item, string $secret): string
+	{
+		return 'dl_' . sha1($item->id . '#:#' . $item->url . '#:#' . $secret);
+	}
+
+	/**
 	 * Handle download of an Item with type File (we're given a local file path).
 	 *
 	 * @param   ItemTable      $item
@@ -694,11 +723,14 @@ class ItemModel extends BaseDatabaseModel
 				throw new RuntimeException();
 			}
 
-			$filename = $folder . '/' . $item->filename;
+			// Same containment check as preDownloadCheck() above -- see
+			// ItemSecurity::resolveContainedFile()'s docblock. $filename below is the CANONICAL,
+			// already-verified-contained path (or NULL), never the raw concatenation.
+			$filename = ItemSecurity::resolveContainedFile($folder, $item->filename);
 
 			try
 			{
-				$fileExists = @is_file($filename);
+				$fileExists = ($filename !== null) && @is_file($filename);
 			}
 			catch (Exception $e)
 			{

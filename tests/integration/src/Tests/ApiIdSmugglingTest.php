@@ -226,7 +226,12 @@ class ApiIdSmugglingTest extends AbstractE2ETestCase
 			[
 				'release_id' => static::$fixtures->releaseId('publicStable'),
 				'type'       => 'link',
-				'url'        => 'https://legit.example/' . self::MARKER,
+				// example.com (unlike the RFC 2606 .example/.test placeholder domains used
+				// elsewhere in this file) is IANA's real, stably-resolving reservation -- this
+				// create must actually pass ItemTable::onBeforeCheck()'s live isSafeUrl() check
+				// to prove the legitimate path, so it needs a URL real DNS resolves to a real
+				// public address, not merely one that looks safe syntactically.
+				'url'        => 'https://example.com/' . self::MARKER,
 				'title'      => $createTitle,
 			]
 		);
