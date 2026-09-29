@@ -150,6 +150,94 @@ class AdminAuthorisationTest extends AbstractE2ETestCase
 	}
 
 	// -----------------------------------------------------------------------
+	// AjaxController::getFiles() authorised the wrong asset: it checked core.create/core.edit/
+	// core.edit.own against the bare 'com_ars' component asset instead of the specific category the
+	// requested release_id belongs to. Joomla's ACL only walks UP from the checked asset to its
+	// ancestors, never down into children, so a grant that exists ONLY on a category asset (as every
+	// catManager grant here does -- see the ACL matrix comment on core.create above) can never satisfy
+	// a check made against the component root.
+	//
+	// Confirmed empirically (by running these two tests against the pre-fix code) that this was too
+	// RESTRICTIVE, not too permissive: catManager was refused for EVERY category, including 'public'
+	// where it genuinely holds core.create/core.edit -- only the 'managers' group, whose grants sit at
+	// the component root itself, ever got through. testAjaxGetFilesSucceedsForACategoryTheActorHasRightsOn
+	// pins that regression directly (it fails against the pre-fix check). The category-scoped fix is
+	// still a genuine access-control improvement even though nothing in THIS codebase's ACL matrix
+	// happened to grant a root-level core.edit.own broadly enough to leak through the old check --
+	// testAjaxGetFilesRefusesACategoryTheActorHasNoRightsOn pins that the fix does not accidentally
+	// open that door either.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * @since 7.5.2
+	 */
+	private function fetchAnyFormToken(Surfer $surfer): string
+	{
+		$response = $surfer->get($this->adminUrl(['view' => 'categories']));
+		$token    = $surfer->getFormToken($response->body);
+
+		$this->assertNotNull($token, 'No anti-CSRF token found on the categories list view.');
+
+		return $token;
+	}
+
+	/**
+	 * Control: catManager holds core.create AND core.edit on the public category (per the ACL matrix
+	 * comment above), so this must succeed -- proving the category-scoped check works for a category
+	 * the actor genuinely has rights on, not merely that it refuses everything.
+	 *
+	 * @since 7.5.2
+	 */
+	public function testAjaxGetFilesSucceedsForACategoryTheActorHasRightsOn(): void
+	{
+		$catManager = $this->loggedInBackend('catManager');
+		$releaseId  = static::$fixtures->releaseId('publicStable');
+		$token      = $this->fetchAnyFormToken($catManager);
+
+		$response = $catManager->get($this->adminUrl([
+			'task'       => 'ajax.getFiles',
+			'format'     => 'raw',
+			'release_id' => $releaseId,
+			$token       => 1,
+		]));
+
+		$this->assertStatus(
+			200,
+			$response,
+			"AjaxController::getFiles() refused catManager for the public category, where it holds "
+			. "core.create and core.edit."
+		);
+	}
+
+	/**
+	 * catManager holds no grant at all -- not core.create, core.edit, nor core.edit.own -- on the
+	 * secret category (it is simply absent from that category's ACL rules). A release_id belonging to
+	 * that category must be refused.
+	 *
+	 * @since 7.5.2
+	 */
+	public function testAjaxGetFilesRefusesACategoryTheActorHasNoRightsOn(): void
+	{
+		$catManager = $this->loggedInBackend('catManager');
+		$releaseId  = static::$fixtures->releaseId('secretStable');
+		$token      = $this->fetchAnyFormToken($catManager);
+
+		$response = $catManager->get($this->adminUrl([
+			'task'       => 'ajax.getFiles',
+			'format'     => 'raw',
+			'release_id' => $releaseId,
+			$token       => 1,
+		]));
+
+		$this->assertStatus(
+			403,
+			$response,
+			"AjaxController::getFiles() answered catManager for the secret category, where it holds no "
+			. "rights at all."
+		);
+	}
+
+	// -----------------------------------------------------------------------
 	// Anti-CSRF on every batch()/reset() task.
 	//
 	// BaseController::checkToken() does not throw on a bad token: it enqueues JINVALID_TOKEN_NOTICE
