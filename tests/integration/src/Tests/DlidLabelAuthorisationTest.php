@@ -10,6 +10,7 @@ namespace Akeeba\ARS\IntegrationTest\Tests;
 defined('_JEXEC') or die;
 
 use Akeeba\ARS\IntegrationTest\AbstractE2ETestCase;
+use Akeeba\ARS\IntegrationTest\Engine\Surfer;
 use PHPUnit\Framework\Attributes\Group;
 
 /**
@@ -256,5 +257,125 @@ class DlidLabelAuthorisationTest extends AbstractE2ETestCase
 			"The subscriber's Download ID list does not contain the subscriber's own primary Download ID, so "
 			. 'the absence assertions above are not proof of filtering.'
 		);
+	}
+
+	// -----------------------------------------------------------------------
+	// The primary/"main" Download ID must survive every bulk list task, not just unpublish.
+	// DlidlabelTable::onBeforePublish() already refused to unpublish it; onBeforePublish() now also
+	// refuses to archive/trash it, and a new onBeforeDelete() refuses to delete it. archive/trash are
+	// additionally unregistered entirely on the frontend list controller -- they have no UI trigger
+	// there at all -- so requesting either one falls through to the __default task (display) instead
+	// of running the bulk operation, which the third test below confirms by asserting nothing changed.
+	// -----------------------------------------------------------------------
+
+	/**
+	 * @return  string
+	 * @since   7.5.2
+	 */
+	private function fetchDlidlabelsListToken(Surfer $surfer): string
+	{
+		$response = $surfer->get($this->siteUrl(['view' => 'dlidlabels']));
+		$token    = $surfer->getFormToken($response->body);
+
+		$this->assertNotNull($token, 'No anti-CSRF token found on the dlidlabels list view.');
+
+		return $token;
+	}
+
+	public function testSubscriberCannotDeleteItsOwnPrimaryDownloadId(): void
+	{
+		$subscriber = $this->loggedIn('subscriber');
+		$primaryId  = static::$fixtures->dlidLabelId('subscriberPrimary');
+		$token      = $this->fetchDlidlabelsListToken($subscriber);
+
+		$subscriber->followRedirects = false;
+		$response = $subscriber->get($this->siteUrl([
+			'view'   => 'dlidlabels',
+			'task'   => 'delete',
+			'cid'    => [$primaryId],
+			$token   => 1,
+		]));
+
+		$this->assertRefused(
+			$subscriber,
+			$response,
+			"A subscriber was able to delete its own primary Download ID via the bulk delete task."
+		);
+		$this->assertSame(
+			1,
+			(int) $this->db()->value('SELECT COUNT(*) FROM `#__ars_dlidlabels` WHERE id = ?', [$primaryId]),
+			'The primary Download ID row no longer exists despite the refusal above.'
+		);
+	}
+
+	/**
+	 * The control for the test above: an ORDINARY (non-primary) owned record CAN be deleted via the
+	 * same bulk task, proving the refusal is specific to the primary record and not the task being
+	 * broken outright.
+	 *
+	 * @since 7.5.2
+	 */
+	public function testSubscriberCanDeleteItsOwnNonPrimaryDownloadId(): void
+	{
+		$subscriber = $this->loggedIn('subscriber');
+		$id         = $this->db()->insert('#__ars_dlidlabels', [
+			'user_id'   => static::$fixtures->userId('subscriber'),
+			'title'     => self::MARKER . ' throwaway ' . uniqid(),
+			'dlid'      => str_repeat('a', 32),
+			'primary'   => 0,
+			'published' => 1,
+			'created'   => date('Y-m-d H:i:s'),
+		]);
+		$token = $this->fetchDlidlabelsListToken($subscriber);
+
+		$subscriber->followRedirects = false;
+		$response = $subscriber->get($this->siteUrl([
+			'view' => 'dlidlabels',
+			'task' => 'delete',
+			'cid'  => [$id],
+			$token => 1,
+		]));
+
+		$this->assertTrue(
+			$response->isRedirect(),
+			"A subscriber's delete of its own ordinary Download ID did not complete.\n" . $response->summary()
+		);
+		$this->assertSame(
+			0,
+			(int) $this->db()->value('SELECT COUNT(*) FROM `#__ars_dlidlabels` WHERE id = ?', [$id]),
+			'The ordinary Download ID row still exists after a delete that should have succeeded.'
+		);
+	}
+
+	/**
+	 * archive/trash are unregistered entirely on the frontend list controller (no UI ever links to
+	 * them), so requesting either falls through to the __default task (display) rather than running
+	 * a state change -- confirmed here by asserting the record's published state is untouched.
+	 *
+	 * @since 7.5.2
+	 */
+	public function testArchiveAndTrashTasksAreNotReachableOnTheFrontendList(): void
+	{
+		$subscriber = $this->loggedIn('subscriber');
+		$primaryId  = static::$fixtures->dlidLabelId('subscriberPrimary');
+
+		foreach (['archive', 'trash'] as $task)
+		{
+			$token = $this->fetchDlidlabelsListToken($subscriber);
+
+			$response = $subscriber->get($this->siteUrl([
+				'view' => 'dlidlabels',
+				'task' => $task,
+				'cid'  => [$primaryId],
+				$token => 1,
+			]));
+
+			$this->assertStatus(200, $response, sprintf('The "%s" task did not fall through to display as expected.', $task));
+			$this->assertSame(
+				1,
+				(int) $this->db()->value('SELECT published FROM `#__ars_dlidlabels` WHERE id = ?', [$primaryId]),
+				sprintf('The primary Download ID\'s published state changed after requesting the unregistered "%s" task.', $task)
+			);
+		}
 	}
 }

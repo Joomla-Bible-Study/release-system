@@ -157,7 +157,13 @@ class DlidlabelTable extends AbstractTable
 	}
 
 	/**
-	 * Disallow unpublishing the Main Download ID of a user.
+	 * Disallow moving the Main Download ID of a user away from published.
+	 *
+	 * Guards ALL of unpublish (0), archive (2) and trash (-2) -- onBeforeCheck() above already
+	 * forces published=1 for a primary record on every ordinary save, but publish()/archive()/
+	 * trash() update the published column directly via SQL, bypassing check()/store() entirely, so
+	 * without this guard covering every non-1 state, a bulk archive or trash task (unlike unpublish,
+	 * which WAS already guarded here) could take the same effect unpublish is blocked from having.
 	 *
 	 * @param   null  $pks
 	 * @param   int   $state
@@ -167,8 +173,9 @@ class DlidlabelTable extends AbstractTable
 	 */
 	protected function onBeforePublish($pks = null, $state = 1, $userId = 0)
 	{
-		// We only need to check what happens when we try to unpublish a record
-		if ($state != 0)
+		// Publishing (state 1) is always fine -- it's every OTHER state that moves a primary record
+		// away from the one state it must always stay in.
+		if ($state == 1)
 		{
 			return;
 		}
@@ -178,7 +185,7 @@ class DlidlabelTable extends AbstractTable
 		{
 			if (($this->primary != 0))
 			{
-				throw new RuntimeException(Text::_("COM_ARS_DLIDLABELS_ERR_CANTUNPUBLISHDEFAULT"));
+				throw new RuntimeException(Text::_("COM_ARS_DLIDLABELS_ERR_CANTUNPUBLISHDEFAULT"), 403);
 			}
 
 			return;
@@ -197,7 +204,26 @@ class DlidlabelTable extends AbstractTable
 				continue;
 			}
 
-			throw new RuntimeException(Text::_("COM_ARS_DLIDLABELS_ERR_CANTUNPUBLISHDEFAULT"));
+			throw new RuntimeException(Text::_("COM_ARS_DLIDLABELS_ERR_CANTUNPUBLISHDEFAULT"), 403);
+		}
+	}
+
+	/**
+	 * Disallow deleting the Main Download ID of a user.
+	 *
+	 * AdminModel::delete() always calls $table->load($pk) immediately before $table->delete($pk) for
+	 * that same id (there is no multi-id batching the way publish()/archive()/trash() have), so
+	 * $this->primary already reflects the record about to be deleted here.
+	 *
+	 * @param   mixed  $pk  The primary key of the record being deleted.
+	 *
+	 * @throws  RuntimeException
+	 */
+	protected function onBeforeDelete($pk = null)
+	{
+		if ($this->primary)
+		{
+			throw new RuntimeException(Text::_("COM_ARS_DLIDLABELS_ERR_CANTDELETEDEFAULT"), 403);
 		}
 	}
 }
