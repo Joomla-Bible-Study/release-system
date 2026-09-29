@@ -16,6 +16,10 @@ use Akeeba\Component\ARS\Site\View\Items\HtmlView;
 use Joomla\CMS\HTML\HTMLHelper;
 use Joomla\CMS\Language\Text;
 
+// getItemUrl()/getDirectLink() already return an HTML-escaped string on every path (either via
+// Route::_()'s own htmlspecialchars(), or an explicit one for the redirect_unauth raw-URL case --
+// see getItemUrl()'s docblock) -- do NOT wrap $downloadUrl/$directLinkURL in $this->escape() below,
+// that would double-encode the "&amp;" Route::_() already produced on every ordinary page view.
 [$downloadUrl, $isDownloadUrl] = $this->getItemUrl($item);
 $directLink    = $this->directlink && $isDownloadUrl;
 $directLinkURL = $directLink ? $this->getDirectLink($item, $downloadUrl) : '';

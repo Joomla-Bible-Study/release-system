@@ -24,6 +24,9 @@ if (!isset($this->releases[$category->id]))
 
 $release     = $this->releases[$category->id];
 $released    = \Joomla\CMS\Factory::getDate($release->created);
+// getReleaseUrl() already returns an HTML-escaped string on every path (Route::_()'s own
+// htmlspecialchars(), or an explicit one for the redirect_unauth raw-URL case) -- do not wrap
+// $release_url in $this->escape() below, that would double-encode Route::_()'s "&amp;".
 $release_url = $this->getReleaseUrl($release);
 
 switch ($release->maturity)

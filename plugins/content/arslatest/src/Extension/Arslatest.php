@@ -377,7 +377,13 @@ class Arslatest extends CMSPlugin implements SubscriberInterface, DatabaseAwareI
 			return '';
 		}
 
-		return $release->version ?? '';
+		// release.version is a plain text field anyone with core.create/core.edit on the release
+		// controls -- e.g. a per-category delegated editor -- with no format validation forcing it to
+		// look like a version number. This callback's return value is spliced directly into the
+		// CONSUMING ARTICLE's already-rendered HTML by onContentPrepare(), which may belong to a
+		// completely different, more privileged author, so an unescaped value here is a stored XSS
+		// reachable by anyone who can create a release in any category, not just the article's author.
+		return htmlspecialchars($release->version ?? '', ENT_QUOTES, 'UTF-8');
 	}
 
 	/**
@@ -441,7 +447,8 @@ class Arslatest extends CMSPlugin implements SubscriberInterface, DatabaseAwareI
 			return '';
 		}
 
-		return $this->streamInfo[$stream_id][$pattern]->version;
+		// See parseRelease()'s docblock -- same stored-XSS reasoning applies to this version string.
+		return htmlspecialchars($this->streamInfo[$stream_id][$pattern]->version, ENT_QUOTES, 'UTF-8');
 	}
 
 	private function parseStreamReleaseLink(string $content, ?string $pattern): string

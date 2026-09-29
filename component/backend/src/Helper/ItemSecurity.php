@@ -625,4 +625,62 @@ final class ItemSecurity
 
 		return array_values(array_unique($ips));
 	}
+
+	/**
+	 * Whether a redirect target computed from an admin-controlled "unauthorised redirect" field --
+	 * Category/Release/Item/Autodescription's `redirect_unauth`, or the component's `no_access_url`
+	 * parameter -- is safe to place into an `<a href>` or a `Location:` redirect.
+	 *
+	 * These are plain text inputs (see e.g. `item.xml`'s `redirect_unauth` field) that anyone holding
+	 * core.edit on the record -- a per-category delegated editor, not necessarily a Super User -- can
+	 * set to any string, with no format validation at the form or model layer. Every call site that
+	 * consumes one already special-cases a genuine `http://`/`https://` absolute URL and otherwise
+	 * treats the value as a site-relative Joomla route to run through `Route::_()`, but neither branch
+	 * actually rules out a dangerous URI scheme (`javascript:`, `data:`, `vbscript:`, ...) or a
+	 * protocol-relative URL (`//attacker.example/...`) to an attacker-controlled host --
+	 * `Route::_()` does not sanitise either of those away, and several frontend templates
+	 * (`items/item.php`, `latest/item.php`, `releases/release.php`, `latest/category.php`) place the
+	 * result directly into an href with no HTML-escaping at all, so a `javascript:` value reaches the
+	 * page verbatim. This is the gate that actually closes that hole, checked in ADDITION to (not
+	 * instead of) escaping the eventual output -- escaping alone stops attribute breakout but does
+	 * nothing about a scheme that executes on click without ever needing an HTML metacharacter.
+	 *
+	 * @param   string  $url  The raw, not-yet-routed value of redirect_unauth / no_access_url.
+	 *
+	 * @return  bool  True if the value may be used as-is (or passed to Route::_()); false if the
+	 *                 caller should fall back to a known-safe default instead.
+	 * @since   7.5.2
+	 */
+	public static function isSafeRedirectTarget(string $url): bool
+	{
+		$url = trim($url);
+
+		if ($url === '')
+		{
+			return false;
+		}
+
+		// A control character (tab, newline, ...) inside the scheme -- e.g. "java\tscript:alert(1)" --
+		// makes the scheme regex below fail to match, which would otherwise fall through to the safe
+		// return at the end. Browsers strip C0 control characters (and some strip the tab/newline
+		// specifically) before parsing a URL's scheme, so the value that actually executes on click is
+		// NOT the one this function would have inspected. Reject outright instead, matching
+		// ControllerReturnURLTrait::getReturnUrl()'s identical rejection for the same reason.
+		if (preg_match('/[\x00-\x1F\x7F]/', $url))
+		{
+			return false;
+		}
+
+		if (str_starts_with($url, '//'))
+		{
+			return false;
+		}
+
+		if (preg_match('#^([a-zA-Z][a-zA-Z0-9+.-]*):#', $url, $matches))
+		{
+			return in_array(strtolower($matches[1]), ['http', 'https'], true);
+		}
+
+		return true;
+	}
 }

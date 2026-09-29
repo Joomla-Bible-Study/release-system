@@ -9,6 +9,7 @@ namespace Akeeba\Component\ARS\Site\View\Items;
 
 defined('_JEXEC') || die;
 
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Mixin\ViewLoadAnyTemplateTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\ViewTaskBasedEventsTrait;
 use Akeeba\Component\ARS\Administrator\Table\CategoryTable;
@@ -186,9 +187,27 @@ class HtmlView extends BaseHtmlView
 
 		$redirectUrl = $item->redirect_unauth;
 
+		// See ItemSecurity::isSafeRedirectTarget()'s docblock -- redirect_unauth is a free-text field
+		// a per-category editor controls, and this method's return value is placed directly into an
+		// href with no further HTML-escaping (see items/item.php -- and this method must therefore
+		// return an ALREADY-escaped string on every path out, exactly once), so a javascript:/data:
+		// scheme value must be rejected here rather than merely routed.
+		if (!ItemSecurity::isSafeRedirectTarget($redirectUrl))
+		{
+			return [$itemUrl, true];
+		}
+
 		if ((substr($redirectUrl, 0, 7) !== 'http://') && (substr($redirectUrl, 0, 8) !== 'https://'))
 		{
+			// Route::_() with its default $xhtml=true already runs the result through
+			// htmlspecialchars() -- same as $itemUrl above -- so nothing further is needed here.
 			$redirectUrl = Route::_($redirectUrl) ?: $itemUrl;
+		}
+		else
+		{
+			// This is the one path that never goes through Route::_(), so it is the only one that
+			// still needs escaping applied here explicitly.
+			$redirectUrl = htmlspecialchars($redirectUrl, ENT_QUOTES, 'UTF-8');
 		}
 
 		return [$redirectUrl, false];

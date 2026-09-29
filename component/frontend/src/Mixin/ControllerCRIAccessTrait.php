@@ -9,6 +9,7 @@ namespace Akeeba\Component\ARS\Site\Mixin;
 
 defined('_JEXEC') || die;
 
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Table\CategoryTable;
 use Akeeba\Component\ARS\Administrator\Table\ItemTable;
 use Akeeba\Component\ARS\Administrator\Table\ReleaseTable;
@@ -111,8 +112,19 @@ trait ControllerCRIAccessTrait
 		$params      = $this->app->getParams();
 		$redirectUrl = ($object->redirect_unauth ?: $params->get('no_access_url', null)) ?: 'index.php';
 
-		// Do I need to route the redirection URL?
-		if ((substr($redirectUrl, 0, 7) !== 'http://') && (substr($redirectUrl, 0, 7) !== 'https://'))
+		// redirect_unauth is a free-text field a per-category editor controls -- see
+		// ItemSecurity::isSafeRedirectTarget()'s docblock. A real Location: header is not itself an
+		// XSS vector the way an unescaped href is, but a javascript:/data: value would still be a
+		// useless (or browser-dependent) redirect target, so it is rejected the same way here.
+		if (!ItemSecurity::isSafeRedirectTarget($redirectUrl))
+		{
+			$redirectUrl = 'index.php';
+		}
+
+		// Do I need to route the redirection URL? (Note: 'https://' is 8 characters -- the second
+		// substr() call must match that length or every https:// URL wrongly falls through to
+		// Route::_() below.)
+		if ((substr($redirectUrl, 0, 7) !== 'http://') && (substr($redirectUrl, 0, 8) !== 'https://'))
 		{
 			$redirectUrl = Route::_($redirectUrl);
 		}

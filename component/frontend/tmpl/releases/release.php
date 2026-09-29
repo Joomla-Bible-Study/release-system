@@ -16,6 +16,9 @@ use Joomla\CMS\Language\Text;
  * @var object   $item
  */
 
+// getReleaseUrl() already returns an HTML-escaped string on every path (Route::_()'s own
+// htmlspecialchars(), or an explicit one for the redirect_unauth raw-URL case) -- do not wrap
+// $release_url in $this->escape() below, that would double-encode Route::_()'s "&amp;".
 $release_url = $this->getReleaseUrl($item);
 
 switch ($item->maturity)

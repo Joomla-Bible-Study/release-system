@@ -10,6 +10,7 @@ namespace Akeeba\Component\ARS\Site\Controller;
 
 defined('_JEXEC') or die;
 
+use Akeeba\Component\ARS\Administrator\Helper\ItemSecurity;
 use Akeeba\Component\ARS\Administrator\Mixin\ControllerEvents;
 use Akeeba\Component\ARS\Administrator\Mixin\RunPluginsTrait;
 use Akeeba\Component\ARS\Administrator\Mixin\TableAssertionTrait;
@@ -114,8 +115,22 @@ class ItemController extends BaseController
 					$noAccessURL = $item->redirect_unauth;
 				}
 
-				// Do I need to route the redirection URL?
-				if ((substr($noAccessURL, 0, 7) !== 'http://') && (substr($noAccessURL, 0, 7) !== 'https://'))
+				// redirect_unauth is a free-text field a per-category editor controls -- see
+				// ItemSecurity::isSafeRedirectTarget()'s docblock. Only substitute when there was an
+				// actual dangerous VALUE to reject: $noAccessURL is empty in the common case (no
+				// no_access_url configured, no redirect_unauth on the item), and isSafeRedirectTarget()
+				// rejects '' too -- substituting a non-empty fallback here would turn "no redirect
+				// configured, fall through to the 403 below" into an unconditional redirect on every
+				// unauthorised download, which is a real behavioural change, not a security fix.
+				if ($noAccessURL !== '' && !ItemSecurity::isSafeRedirectTarget($noAccessURL))
+				{
+					$noAccessURL = '';
+				}
+
+				// Do I need to route the redirection URL? ('https://' is 8 characters -- the second
+				// substr() call must match that length or every https:// URL wrongly falls through to
+				// Route::_() below.)
+				if ((substr($noAccessURL, 0, 7) !== 'http://') && (substr($noAccessURL, 0, 8) !== 'https://'))
 				{
 					$noAccessURL = Route::_($noAccessURL);
 				}

@@ -662,4 +662,48 @@ class ItemSecurityTest extends TestCase
 	{
 		$this->assertNull($this->invokePrivateStatic('resolveRedirectLocation', ['not-a-url', '/package.zip']));
 	}
+
+	// -----------------------------------------------------------------------------------------------
+	// isSafeRedirectTarget(): stored XSS via redirect_unauth / no_access_url (Category/Release/Item/
+	// Autodescription frontend templates, and the {arslatest} content-plugin tag's own sibling fix).
+	// -----------------------------------------------------------------------------------------------
+
+	public static function unsafeRedirectTargetProvider(): array
+	{
+		return [
+			'javascript: scheme'                => ['javascript:alert(document.cookie)'],
+			'javascript: scheme, mixed case'    => ['JavaScript:alert(1)'],
+			'data: scheme'                      => ['data:text/html,<script>alert(1)</script>'],
+			'vbscript: scheme'                  => ['vbscript:msgbox(1)'],
+			'protocol-relative URL'             => ['//evil.example/phish'],
+			'empty string'                      => [''],
+			'whitespace only'                   => ['   '],
+			'tab inside the scheme'             => ["java\tscript:alert(1)"],
+			'newline inside the scheme'         => ["java\nscript:alert(1)"],
+			'leading C0 control character'      => ["\x01javascript:alert(1)"],
+		];
+	}
+
+	#[DataProvider('unsafeRedirectTargetProvider')]
+	public function testIsSafeRedirectTargetRejectsDangerousValues(string $url): void
+	{
+		$this->assertFalse(ItemSecurity::isSafeRedirectTarget($url));
+	}
+
+	public static function safeRedirectTargetProvider(): array
+	{
+		return [
+			'plain relative Joomla route' => ['index.php?option=com_ars&view=items&release_id=5'],
+			'bare relative path'          => ['some/page'],
+			'http absolute URL'           => ['http://example.com/path'],
+			'https absolute URL'          => ['https://example.com/path'],
+			'https URL with a query string containing a colon' => ['https://example.com/path?a=b:c'],
+		];
+	}
+
+	#[DataProvider('safeRedirectTargetProvider')]
+	public function testIsSafeRedirectTargetAcceptsOrdinaryValues(string $url): void
+	{
+		$this->assertTrue(ItemSecurity::isSafeRedirectTarget($url));
+	}
 }
