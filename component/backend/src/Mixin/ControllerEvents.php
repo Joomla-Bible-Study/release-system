@@ -54,7 +54,20 @@ trait ControllerEvents
 		$eventName = 'onBefore' . ucfirst($task);
 
 		$this->triggerEvent('onBeforeExecute', [&$task]);
-		$this->triggerEvent($eventName);
+
+		// A task literally named 'execute' (?task=execute, reachable and unauthenticated on any
+		// public controller) makes $eventName above collide with the hard-coded 'onBeforeExecute'
+		// name -- firing it a SECOND time here, but via triggerEvent($eventName) with NO arguments,
+		// since every genuine onBefore<Task> handler (onBeforeAll(), onBeforeStream(), ...) takes
+		// none. A handler declared as onBeforeExecute(&$task) -- UpdateController and both Dlidlabel
+		// controllers all have one -- requires that one argument, so the argument-less second call
+		// threw an uncaught ArgumentCountError (a TypeError, not an Exception, so nothing here or in
+		// Joomla's own dispatch caught it) on every single request. Skipping the collision case
+		// leaves every other task's onBefore<Task> call completely unchanged.
+		if ($eventName !== 'onBeforeExecute')
+		{
+			$this->triggerEvent($eventName);
+		}
 
 		// The task may have changed, so let's try that once again.
 		if (isset($this->taskMap[$task]))
@@ -77,7 +90,15 @@ trait ControllerEvents
 		// Execute onAfter<Task> and onAfterExecute events
 		$eventName = 'onAfter' . ucfirst($task);
 
-		$this->triggerEvent($eventName);
+		// Mirrors the onBeforeExecute collision above: for $task === 'execute', $eventName is
+		// 'onAfterExecute' too, and firing it here with no arguments would hit the same
+		// ArgumentCountError in onAfterExecute($task) (also declared by all three controllers) --
+		// this time on the way OUT, after the real task already ran.
+		if ($eventName !== 'onAfterExecute')
+		{
+			$this->triggerEvent($eventName);
+		}
+
 		$this->triggerEvent('onAfterExecute', [$task]);
 
 		return $result;
