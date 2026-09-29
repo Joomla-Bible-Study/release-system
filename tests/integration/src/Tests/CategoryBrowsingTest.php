@@ -240,4 +240,78 @@ class CategoryBrowsingTest extends AbstractE2ETestCase
 		$this->assertStatus(200, $response, 'An invalid layout value was not normalised to a working layout.');
 		$this->assertBodyContains('E2E Public Downloads', $response, 'The normalised category list did not show the public category.');
 	}
+
+	// -----------------------------------------------------------------------
+	// Stored XSS via redirect_unauth on categories/category.php. redirect_unauth is a free-text field
+	// anyone with core.edit on a category controls; a value that is neither http(s):// nor a scheme
+	// Route::_() recognises reaches this template's href either completely unescaped (Route::link()
+	// only actually escapes a value it routes, which requires it to start with 'index.php' or '&' --
+	// see Route.php) or, for an http(s):// value, verbatim. These two tests use the 'secret' category
+	// purely as a throwaway row nothing else in this fixture depends on for its redirect_unauth value;
+	// tearDown() restores it so later tests are not affected.
+	// -----------------------------------------------------------------------
+
+	protected function tearDown(): void
+	{
+		$this->db()->query(
+			"UPDATE `#__ars_categories` SET redirect_unauth = '', show_unauth_links = 0 WHERE id = ?",
+			[static::$fixtures->categoryId('secret')]
+		);
+
+		parent::tearDown();
+	}
+
+	/**
+	 * A quote inside redirect_unauth must not break out of the href attribute. Route::_() only
+	 * escapes a value it actually routes (one starting with 'index.php' or '&'); a plain relative
+	 * path like this one is handed back completely unchanged, so the template itself must be the one
+	 * escaping it.
+	 *
+	 * @since 7.5.2
+	 */
+	public function testRedirectUnauthQuoteBreakoutIsEscapedOnTheCategoriesPage(): void
+	{
+		$this->db()->query(
+			"UPDATE `#__ars_categories` SET redirect_unauth = ?, show_unauth_links = 1 WHERE id = ?",
+			['/x" onmouseover="alert(1)', static::$fixtures->categoryId('secret')]
+		);
+
+		$response = $this->guest()->get($this->siteUrl(['view' => 'categories', 'layout' => 'repository']));
+
+		$this->assertStatus(200, $response, 'The category list did not render for a guest.');
+		$this->assertBodyNotContains(
+			'onmouseover="alert(1)',
+			$response,
+			'A quote in redirect_unauth broke out of the href attribute.'
+		);
+		$this->assertBodyContains(
+			'/x&quot; onmouseover=&quot;alert(1)',
+			$response,
+			'The quote-breakout payload was not found HTML-escaped in the response at all -- '
+			. 'the category may not be rendering as expected rather than the escaping actually working.'
+		);
+	}
+
+	/**
+	 * A javascript: URI in redirect_unauth must never reach an href verbatim -- clicking the link
+	 * would execute it in the visitor's session with no HTML-metacharacter injection needed at all.
+	 *
+	 * @since 7.5.2
+	 */
+	public function testRedirectUnauthJavascriptSchemeIsRejectedOnTheCategoriesPage(): void
+	{
+		$this->db()->query(
+			"UPDATE `#__ars_categories` SET redirect_unauth = ?, show_unauth_links = 1 WHERE id = ?",
+			['javascript:alert(document.cookie)', static::$fixtures->categoryId('secret')]
+		);
+
+		$response = $this->guest()->get($this->siteUrl(['view' => 'categories', 'layout' => 'repository']));
+
+		$this->assertStatus(200, $response, 'The category list did not render for a guest.');
+		$this->assertBodyNotContains(
+			'javascript:',
+			$response,
+			'A javascript: URI in redirect_unauth reached the rendered page.'
+		);
+	}
 }

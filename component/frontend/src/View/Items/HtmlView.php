@@ -189,28 +189,25 @@ class HtmlView extends BaseHtmlView
 
 		// See ItemSecurity::isSafeRedirectTarget()'s docblock -- redirect_unauth is a free-text field
 		// a per-category editor controls, and this method's return value is placed directly into an
-		// href with no further HTML-escaping (see items/item.php -- and this method must therefore
-		// return an ALREADY-escaped string on every path out, exactly once), so a javascript:/data:
-		// scheme value must be rejected here rather than merely routed.
+		// href with no further HTML-escaping (see items/item.php), so a javascript:/data: scheme
+		// value must be rejected here rather than merely routed.
 		if (!ItemSecurity::isSafeRedirectTarget($redirectUrl))
 		{
 			return [$itemUrl, true];
 		}
 
-		if ((substr($redirectUrl, 0, 7) !== 'http://') && (substr($redirectUrl, 0, 8) !== 'https://'))
-		{
-			// Route::_() with its default $xhtml=true already runs the result through
-			// htmlspecialchars() -- same as $itemUrl above -- so nothing further is needed here.
-			$redirectUrl = Route::_($redirectUrl) ?: $itemUrl;
-		}
-		else
-		{
-			// This is the one path that never goes through Route::_(), so it is the only one that
-			// still needs escaping applied here explicitly.
-			$redirectUrl = htmlspecialchars($redirectUrl, ENT_QUOTES, 'UTF-8');
-		}
+		$redirectUrl = ((substr($redirectUrl, 0, 7) === 'http://') || (substr($redirectUrl, 0, 8) === 'https://'))
+			? $redirectUrl
+			: (Route::_($redirectUrl) ?: $itemUrl);
 
-		return [$redirectUrl, false];
+		// A single escaping pass on the FINAL value, with double_encode DISABLED: Route::_() only
+		// actually runs a value through the real router -- and its own htmlspecialchars() -- when
+		// that value starts with 'index.php' or '&' (Route::link()'s early-exit); every other value,
+		// including any relative redirect_unauth that does NOT start with 'index.php' (e.g.
+		// '/x" onmouseover="alert(1)') and the raw absolute-URL branch above, comes back completely
+		// unescaped. double_encode=false leaves an already-routed value's "&amp;" alone while still
+		// encoding a raw '"'/'<'/'>' that slipped through either un-routed case.
+		return [htmlspecialchars($redirectUrl, ENT_QUOTES, 'UTF-8', false), false];
 	}
 
 	public function getDirectLink(object $item, string $downloadUrl): ?string

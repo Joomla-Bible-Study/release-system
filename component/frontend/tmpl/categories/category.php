@@ -40,16 +40,24 @@ if (!in_array($item->access, $user->getAuthorisedViewLevels()))
 		$unauthUrl = '';
 	}
 
-	// Route::_() (default $xhtml=true, same as the $category_url default above) already runs its
-	// result through htmlspecialchars(); the raw absolute-URL branch never goes through Route::_(),
-	// so it is the only one that still needs escaping applied here explicitly. Either way,
-	// $category_url below is an ALREADY-escaped string -- see the href output further down, which
-	// must NOT wrap it in htmlentities()/escape() again or it would double-encode Route::_()'s
-	// "&amp;" on every ordinary (has-access) page view.
 	$category_url = ((strpos($unauthUrl, 'http://') === 0) || (strpos($unauthUrl, 'https://') === 0))
-		? htmlspecialchars($unauthUrl, ENT_QUOTES, 'UTF-8')
+		? $unauthUrl
 		: Route::_($unauthUrl);
 }
+
+// A single escaping pass on the FINAL value, with double_encode DISABLED, covers every branch above
+// (including the has-access default further up) without double-encoding OR under-escaping either:
+// Route::_() only actually runs a value through the real router -- and its own htmlspecialchars() --
+// when that value starts with 'index.php' or '&' (Route::link()'s early-exit, see Route.php around
+// its "!str_starts_with(...)" check); every other string it is given, including any relative
+// redirect_unauth value that does NOT start with 'index.php' (e.g. '/x" onmouseover="alert(1)') and
+// the raw absolute-URL branch above, comes back completely UNCHANGED -- unescaped. double_encode
+// being false means an "&amp;" a routed value already carries is left alone (no "&amp;amp;"), while
+// a raw '"'/'<'/'>' that slipped through untouched -- from either of those un-routed cases -- still
+// gets encoded here. (The pushed commit that introduced isSafeRedirectTarget()'s scheme/control-
+// character checks incorrectly assumed Route::_() escapes every path; it does not, and left this
+// output-side gap open for exactly that "doesn't start with index.php" shape.)
+$category_url = htmlspecialchars($category_url, ENT_QUOTES, 'UTF-8', false);
 
 HTMLHelper::_('bootstrap.collapse', '.ars-collapse');
 ?>
