@@ -36,6 +36,19 @@ classify hardening versus vulnerabilities.
   end-to-end suite against it over real HTTP. Read `tests/README.md` before adding to either. There
   is no Jest. `assets/http/api.http` is the documented JSON:API request collection (PHPStorm HTTP Client);
   its `http-client.env.json` / `http-client.private.env.json` live next to it.
+- **No `phpunit` on PATH here.** Any PHPUnit ≥ 11 runs the unit suite, e.g.
+  `../com_licenseportal/vendor/bin/phpunit -c phpunit.xml`. `run.sh` calls `phpunit` from PATH, so give
+  it a shim: `ln -s <that phpunit> <dir>/phpunit && PATH=<dir>:$PATH tests/integration/docker/run.sh …`.
+- **One e2e class:** `run.sh -j 6.2 --php=8.5 --skip-build --filter=<Class> -- --testdox`.
+  `--skip-build` installs the newest zip in `release/`.
+- **`#__ars_dlidlabels.primary_user_id` (7.5.3) is a generated guard column.** Never write it.
+  `DlidlabelTable::getFields()` hides it because Joomla's Table writes every column back. Any new
+  Table or insert on this table must leave it out.
+- **History is linear:** merge PRs with `gh pr merge --rebase`. A rebase-merge creates a new commit, so
+  delete the local branch with `-D` after checking `git diff <branch> <merged-sha>` is empty.
+- **Keep in-progress work safe:** if this checkout has uncommitted or unfinished-merge work, do new
+  changes in a worktree (`git worktree add ../release-system-<topic> -b <branch> origin/development`),
+  then `git worktree remove` after merging.
 
 ## JSON:API
 
