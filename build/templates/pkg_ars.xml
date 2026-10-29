@@ -46,8 +46,9 @@
     <scriptfile>script.ars.php</scriptfile>
 
     <!--
-        CWM: the upstream <updateservers> block pointing at http://cdn.akeeba.com/updates/ars.xml
-        is deliberately removed.
+        CWM: the upstream <updateservers> block (which has pointed at, in order: an old
+        raw.githubusercontent.com feed, then http://cdn.akeeba.com/updates/ars.xml, then
+        https://cdn.akeeba.com/updates/ars.xml) is deliberately removed.
 
         We build and install ARS ourselves from Joomla-Bible-Study/release-system, carrying local
         commits on top of upstream. Leaving the update site registered means Joomla offers Akeeba's
@@ -59,7 +60,11 @@
         how the pinned build is protected.
 
         Note: removing this from the manifest stops NEW installs registering the update site; it
-        does not necessarily delete an already-registered row from #__update_sites. Check
-        System -> Update Sites on each site and disable "Akeeba Release System Updates" there too.
+        does not necessarily delete an already-registered row from #__update_sites. That is what
+        script.ars.php's removeOldUpdateSites() does at every upgrade: it must know about all
+        THREE historical URLs above, not just the oldest one, or a site that upgraded through the
+        intermediate plaintext-HTTP version keeps a live, spoofable update source registered
+        forever. Check System -&gt; Update Sites on each site and disable "Akeeba Release System
+        Updates" there too, if a very old install somehow still has one this doesn't catch.
     -->
 </extension>

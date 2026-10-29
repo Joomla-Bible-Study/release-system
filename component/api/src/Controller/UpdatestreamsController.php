@@ -154,6 +154,23 @@ class UpdatestreamsController extends ApiController
 		return true;
 	}
 
+	protected function save($recordKey = null)
+	{
+		// This class's own save() shadows AssertApiAccess::save() entirely (a class method always wins
+		// over a trait method of the same name) -- so the ID-smuggling check that trait's save() exists
+		// specifically to run before Joomla's own primary-key resolution must be called explicitly here
+		// too, or it silently never runs again. See assertCreateCarriesNoId()'s docblock.
+		$this->assertCreateCarriesNoId($recordKey);
+
+		if ($recordKey) {
+			$this->assertCanEditIntoCategory(
+				$this->resolveSubmittedFieldValue($this->getRequestData(), ['category', 'category_id', 'catid'])
+			);
+		}
+
+		return parent::save($recordKey);
+	}
+
 	/**
 	 * Get the ID of the category an update stream belongs to.
 	 *

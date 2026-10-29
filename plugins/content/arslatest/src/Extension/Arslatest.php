@@ -448,7 +448,7 @@ class Arslatest extends CMSPlugin implements SubscriberInterface, DatabaseAwareI
 		}
 
 		// See parseRelease()'s docblock -- same stored-XSS reasoning applies to this version string.
-		return htmlspecialchars($this->streamInfo[$stream_id][$pattern]->version, ENT_QUOTES, 'UTF-8');
+		return htmlspecialchars($this->streamInfo[$stream_id][$pattern]->version ?? '', ENT_QUOTES, 'UTF-8');
 	}
 
 	private function parseStreamReleaseLink(string $content, ?string $pattern): string

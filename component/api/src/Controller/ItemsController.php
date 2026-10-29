@@ -197,6 +197,25 @@ class ItemsController extends ApiController
 		return true;
 	}
 
+	protected function save($recordKey = null)
+	{
+		// This class's own save() shadows AssertApiAccess::save() entirely (a class method always wins
+		// over a trait method of the same name) -- so the ID-smuggling check that trait's save() exists
+		// specifically to run before Joomla's own primary-key resolution must be called explicitly here
+		// too, or it silently never runs again. See assertCreateCarriesNoId()'s docblock.
+		$this->assertCreateCarriesNoId($recordKey);
+
+		if ($recordKey) {
+			$releaseId = $this->resolveSubmittedFieldValue($this->getRequestData(), ['release_id']);
+
+			$this->assertCanEditIntoCategory(
+				$releaseId === null ? null : (int) $this->getModel('Items')->getCategoryFromRelease($releaseId)
+			);
+		}
+
+		return parent::save($recordKey);
+	}
+
 	private function getFileNameToDelete(int $id): string
 	{
 		if (!$id) {

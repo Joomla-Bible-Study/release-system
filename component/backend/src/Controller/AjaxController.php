@@ -38,6 +38,9 @@ class AjaxController extends BaseController
 		$release_id = $this->input->getInt('release_id', 0);
 		$selected   = $this->input->getString('selected', '');
 
+		/** @var ItemsModel $model */
+		$model = $this->getModel('Items', 'Administrator');
+
 		// Make sure the user has the create, edit or edit.own ACL privilege ON THE CATEGORY THIS
 		// release ACTUALLY BELONGS TO -- not merely "somewhere in com_ars". Checking the bare
 		// 'com_ars' component asset was not a cross-category leak: Joomla's ACL only walks UP from
@@ -57,7 +60,7 @@ class AjaxController extends BaseController
 		// grant), this check would have accepted it for EVERY category's release_id, exactly the
 		// cross-category exposure the category-scoped check rules out regardless of how the grant is
 		// shaped.
-		$categoryId = $this->getCategoryIdForRelease($release_id);
+		$categoryId = $release_id ? $model->getCategoryFromRelease($release_id) : null;
 
 		if (empty($categoryId))
 		{
@@ -77,8 +80,6 @@ class AjaxController extends BaseController
 		}
 
 		// Return the HTML list of files
-		/** @var ItemsModel $model */
-		$model   = $this->getModel('Items', 'Administrator');
 		$options = $model->getFilesOptions($release_id, $item_id);
 
 		@ob_end_clean();
@@ -86,28 +87,5 @@ class AjaxController extends BaseController
 		echo HTMLHelper::_('select.options', $options, 'value', 'text', $selected);
 
 		Factory::getApplication()->close();
-	}
-
-	/**
-	 * Resolve the ID of the category a release belongs to. This runs BEFORE the ACL check above, so
-	 * it must not depend on the caller already holding any privilege -- getItem() on the back-end
-	 * model deliberately does not filter by view level or ownership (see the JSON:API gotcha in
-	 * CLAUDE.md making the same point about these back-end models).
-	 *
-	 * @param   int  $releaseId  The release ID.
-	 *
-	 * @return  int  The category ID, or 0 if the release does not exist.
-	 * @since   7.5.2
-	 */
-	private function getCategoryIdForRelease(int $releaseId): int
-	{
-		if (empty($releaseId))
-		{
-			return 0;
-		}
-
-		$release = $this->getModel('Release', 'Administrator')->getItem($releaseId);
-
-		return $release ? (int) ($release->category_id ?? 0) : 0;
 	}
 }

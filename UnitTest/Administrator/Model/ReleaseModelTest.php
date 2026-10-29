@@ -13,6 +13,7 @@ use Akeeba\ARS\UnitTest\Stubs\RecordingDatabase;
 use Akeeba\Component\ARS\Administrator\Model\ReleaseModel;
 use Akeeba\Component\ARS\Administrator\Table\ReleaseTable;
 use Joomla\CMS\Factory;
+use Joomla\CMS\User\User;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -308,5 +309,135 @@ class ReleaseModelTest extends TestCase
 		$this->assertNotNull($db->lastQuery, 'The stored category_id must actually be looked up.');
 		$this->assertStringContainsString('ars_releases', $db->lastQuery->fromCalls[0] ?? '');
 		$this->assertSame(42, $db->lastQuery->bindValues[':id'] ?? null, 'Must look up THIS record, by its own id.');
+	}
+
+	// -----------------------------------------------------------------------------------------------------------
+	// ReleaseModel::assertSourceCategoryAccessForBatch(), the Release-side counterpart of
+	// ItemModelTest's equivalent coverage -- both close the same H3/H4 findings (batch move/copy
+	// authorising only the DESTINATION category, never the one a record is actually being taken FROM).
+	//
+	// Unlike ItemModel, a Release's category is a direct column (category_id) rather than one hop away
+	// through a parent table, so the query this method builds is simpler -- but the authorisation shape
+	// being tested is identical. Reuses newModel() above (identical signature/behaviour to the one this
+	// suite already had).
+	// -----------------------------------------------------------------------------------------------------------
+
+	private function stubIdentity(array $permissions): void
+	{
+		$user              = new User(42);
+		$user->permissions = $permissions;
+
+		Factory::$application = new class($user) {
+			public function __construct(private User $user)
+			{
+			}
+
+			public function getIdentity()
+			{
+				return $this->user;
+			}
+		};
+	}
+
+	private function invokeBatchAuthorisationCheck(ReleaseModel $model, array $commands, array $pks): void
+	{
+		$ref = new ReflectionMethod(ReleaseModel::class, 'assertSourceCategoryAccessForBatch');
+
+		if (version_compare(PHP_VERSION, '8.1.0', 'lt'))
+		{
+			$ref->setAccessible(true);
+		}
+
+		$ref->invoke($model, $commands, $pks);
+	}
+
+	public function testBatchNoExceptionAndNoQueryWhenTheBatchCommandIsNotAMoveOrCopy(): void
+	{
+		// batch_copymove for ReleaseModel is 'category_id'; a batch of only, say, a tag change never
+		// sets it, so there is nothing to re-check.
+		$this->stubIdentity([]);
+
+		$db = new RecordingDatabase();
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['tag' => 5], [1, 2, 3]);
+
+		$this->assertSame([], $db->queries, 'No permission check should have run at all, so no query should have been issued.');
+	}
+
+	public function testBatchNoExceptionWhenThePksListIsEmpty(): void
+	{
+		$this->stubIdentity([]);
+
+		$db = new RecordingDatabase();
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['category_id' => 7], []);
+
+		$this->assertSame([], $db->queries);
+	}
+
+	public function testBatchAllowsTheMoveWhenTheUserMayEditTheSourceCategory(): void
+	{
+		$this->stubIdentity(['com_ars.category.3|core.edit' => true]);
+
+		$db         = new RecordingDatabase();
+		$db->result = [['id' => 5, 'category_id' => 3]];
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['category_id' => 99], [5]);
+
+		$this->assertNotEmpty($db->queries, 'The source category should still have been looked up.');
+	}
+
+	public function testBatchRejectsTheMoveWhenTheUserMayNotEditTheSourceCategory(): void
+	{
+		// The user has rights on the TARGET category (99) but not on the SOURCE one (3) the release is
+		// actually in -- this is exactly the H3/H4 attack shape.
+		$this->stubIdentity(['com_ars.category.99|core.edit' => true]);
+
+		$db         = new RecordingDatabase();
+		$db->result = [['id' => 5, 'category_id' => 3]];
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('JLIB_APPLICATION_ERROR_BATCH_CANNOT_EDIT');
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['category_id' => 99], [5]);
+	}
+
+	public function testBatchRejectsACopyJustAsReadilyAsAMove(): void
+	{
+		$this->stubIdentity([]);
+
+		$db         = new RecordingDatabase();
+		$db->result = [['id' => 5, 'category_id' => 3]];
+
+		$this->expectException(RuntimeException::class);
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['category_id' => 99, 'move_copy' => 'c'], [5]);
+	}
+
+	public function testBatchAReleaseMissingFromTheQueryResultIsSkippedRatherThanRejected(): void
+	{
+		$this->stubIdentity([]);
+
+		$db         = new RecordingDatabase();
+		$db->result = []; // Empty: pk 5 matches no row.
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['category_id' => 99], [5]);
+
+		$this->addToAssertionCount(1); // Reaching here without an exception IS the assertion.
+	}
+
+	public function testBatchEveryPkInABatchIsCheckedNotJustTheFirst(): void
+	{
+		$this->stubIdentity(['com_ars.category.3|core.edit' => true]);
+
+		$db         = new RecordingDatabase();
+		$db->result = [
+			['id' => 5, 'category_id' => 3],
+			['id' => 6, 'category_id' => 4],
+		];
+
+		$this->expectException(RuntimeException::class);
+
+		$this->invokeBatchAuthorisationCheck($this->newModel($db), ['category_id' => 99], [5, 6]);
 	}
 }

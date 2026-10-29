@@ -9,6 +9,7 @@ namespace Akeeba\ARS\UnitTest\Site\Model;
 
 defined('_JEXEC') or die;
 
+use Akeeba\Component\ARS\Administrator\Table\CategoryTable;
 use Akeeba\Component\ARS\Administrator\Table\ItemTable;
 use Akeeba\Component\ARS\Site\Model\ItemModel;
 use ErrorException;
@@ -17,6 +18,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
+use RuntimeException;
 
 /**
  * Tests three private/security-sensitive helpers on {@see ItemModel}.
@@ -31,9 +33,46 @@ class ItemModelDownloadIdTest extends TestCase
 {
 	private ItemModel $model;
 
+	private string $categoryDir;
+
 	protected function setUp(): void
 	{
 		$this->model = (new ReflectionClass(ItemModel::class))->newInstanceWithoutConstructor();
+
+		$this->categoryDir = sys_get_temp_dir() . '/ars-predownload-test-' . bin2hex(random_bytes(8));
+
+		mkdir($this->categoryDir, 0777, true);
+		file_put_contents($this->categoryDir . '/package.zip', 'x');
+
+		mkdir($this->categoryDir . '-sibling', 0777, true);
+		file_put_contents($this->categoryDir . '-sibling/secret.txt', 'x');
+	}
+
+	protected function tearDown(): void
+	{
+		$this->rrmdir($this->categoryDir);
+		$this->rrmdir($this->categoryDir . '-sibling');
+	}
+
+	private function rrmdir(string $dir): void
+	{
+		if (!is_dir($dir))
+		{
+			return;
+		}
+
+		foreach (scandir($dir) as $entry)
+		{
+			if ($entry === '.' || $entry === '..')
+			{
+				continue;
+			}
+
+			$path = $dir . '/' . $entry;
+			is_dir($path) ? $this->rrmdir($path) : unlink($path);
+		}
+
+		rmdir($dir);
 	}
 
 	private function invokePrivate(string $method, array $args = [])
@@ -263,5 +302,122 @@ class ItemModelDownloadIdTest extends TestCase
 	public function testGetMimeTypeFromContentTypeHeader(?string $header, ?string $expected): void
 	{
 		self::assertSame($expected, $this->invokePrivate('getMimeTypeFromContentTypeHeader', [$header]));
+	}
+
+	// ---------------------------------------------------------------------------------------------
+	// preDownloadCheck() — H1 regression: a crafted item `filename` escaping the category directory
+	// ---------------------------------------------------------------------------------------------
+
+	private function itemAndCategory(string $filename, string $type = 'file'): array
+	{
+		$item           = (new ReflectionClass(ItemTable::class))->newInstanceWithoutConstructor();
+		$item->type     = $type;
+		$item->filename = $filename;
+
+		$category            = (new ReflectionClass(CategoryTable::class))->newInstanceWithoutConstructor();
+		$category->directory = $this->categoryDir;
+
+		return [$item, $category];
+	}
+
+	public function testALegitimateFileInTheCategoryDirectoryPassesTheCheck(): void
+	{
+		[$item, $category] = $this->itemAndCategory('package.zip');
+
+		$this->model->preDownloadCheck($item, $category);
+
+		$this->addToAssertionCount(1); // No exception thrown is the assertion.
+	}
+
+	public function testALinkTypeItemSkipsTheFilesystemCheckEntirely(): void
+	{
+		// A 'link' item has no local filename to check at all; even a nonsensical $item->filename or a
+		// missing category directory must not prevent this from passing.
+		[$item, $category] = $this->itemAndCategory('../whatever', 'link');
+
+		$this->model->preDownloadCheck($item, $category);
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testAMissingFileIsReportedAsNotFound(): void
+	{
+		[$item, $category] = $this->itemAndCategory('does-not-exist.zip');
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionCode(404);
+
+		$this->model->preDownloadCheck($item, $category);
+	}
+
+	/**
+	 * The regression case itself: a `filename` crafted to escape the category directory (e.g. set via a
+	 * backend account with only category-scoped edit rights) must be reported as "not found", exactly
+	 * like a missing file — NOT resolved and opened, even though the target file genuinely exists on
+	 * disk one directory up.
+	 */
+	public function testATraversalFilenameIsReportedAsNotFoundEvenThoughTheTargetFileExists(): void
+	{
+		[$item, $category] = $this->itemAndCategory('../' . basename($this->categoryDir) . '-sibling/secret.txt');
+
+		// Precondition: the traversal target genuinely exists, so a pass here would only be possible if
+		// the traversal were not actually blocked.
+		$this->assertFileExists($this->categoryDir . '-sibling/secret.txt');
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionCode(404);
+
+		$this->model->preDownloadCheck($item, $category);
+	}
+
+	public function testABareParentTraversalFilenameIsRejected(): void
+	{
+		[$item, $category] = $this->itemAndCategory('..');
+
+		$this->expectException(RuntimeException::class);
+
+		$this->model->preDownloadCheck($item, $category);
+	}
+
+	// ---------------------------------------------------------------------------------------------
+	// sanitiseContentDispositionFilename() — L2 regression: attribute breakout in Content-Disposition
+	// ---------------------------------------------------------------------------------------------
+
+	public function testALegitimateFilenameIsReturnedUnchanged(): void
+	{
+		self::assertSame(
+			'Awesome-Package-1.2.3.zip',
+			$this->invokePrivate('sanitiseContentDispositionFilename', ['Awesome-Package-1.2.3.zip'])
+		);
+	}
+
+	/**
+	 * The regression case itself: a `"` in the filename must not survive, since it would otherwise break
+	 * out of the quoted `Content-Disposition: attachment; filename="..."` attribute and let the rest of
+	 * the value be interpreted as a second header parameter (e.g. a bogus `filename*=`).
+	 */
+	public function testAQuoteCharacterIsStripped(): void
+	{
+		self::assertSame(
+			'evil; filename*=UTF-8too.zip',
+			$this->invokePrivate('sanitiseContentDispositionFilename', ['evil"; filename*=UTF-8too.zip'])
+		);
+	}
+
+	public static function provideControlCharacterPayloads(): array
+	{
+		return [
+			'NUL byte'            => ["package\0.zip", 'package.zip'],
+			'carriage return'     => ["package\r.zip", 'package.zip'],
+			'line feed'           => ["package\n.zip", 'package.zip'],
+			'DEL (0x7F)'          => ["package\x7F.zip", 'package.zip'],
+			'multiple characters' => ["\"evil\"\x00name\".zip", 'evilname.zip'],
+		];
+	}
+
+	#[DataProvider('provideControlCharacterPayloads')]
+	public function testControlCharactersAndQuotesAreStripped(string $payload, string $expected): void
+	{
+		self::assertSame($expected, $this->invokePrivate('sanitiseContentDispositionFilename', [$payload]));
 	}
 }

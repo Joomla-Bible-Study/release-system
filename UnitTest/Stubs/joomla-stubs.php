@@ -1088,16 +1088,23 @@ namespace Joomla\CMS\Table {
 
 namespace Joomla\CMS\Helper {
 	/**
-	 * Stand-in for Joomla\CMS\Helper\TagsHelper. It exists purely as a type-hint target for
-	 * Joomla\CMS\Tag\TaggableTableTrait and for ReleaseModel::getItem(), which fetches a record's assigned tag
-	 * ids through it. No test in this suite exercises tag assignment, so this stub stores nothing and always
-	 * reports no tags.
+	 * Real Joomla's tag lookup/assignment helper. It exists purely as a type-hint target for
+	 * Joomla\CMS\Tag\TaggableTableTrait, for ReleaseModel::getItem() (which fetches a record's assigned
+	 * tag ids through it), and for the one place a test needs to construct it (`common/tags.php`, a view
+	 * template outside the unit suite's remit). Both getTagIds() and getItemTags() are real methods on
+	 * the actual class (confirmed against Joomla core) used by different callers; this stub stores
+	 * nothing and always reports no tags for either.
 	 */
 	if (!class_exists(TagsHelper::class, false))
 	{
 		class TagsHelper
 		{
 			public function getTagIds($id, $prefix)
+			{
+				return [];
+			}
+
+			public function getItemTags($type, $id, $getTagData = true)
 			{
 				return [];
 			}
@@ -1279,6 +1286,19 @@ namespace Joomla\CMS\MVC\Model {
 			{
 				return [];
 			}
+
+			/**
+			 * Stand-in for Joomla\CMS\MVC\Model\ListModel::getTotal(): hand the list query to the
+			 * (stubbed) database and load its single result. That is all a test of a model's getTotal()
+			 * override needs — it can see whether the real count query fired by counting setQuery()
+			 * calls and scripting loadResult().
+			 */
+			public function getTotal()
+			{
+				$this->getDatabase()->setQuery($this->getListQuery());
+
+				return (int) $this->getDatabase()->loadResult();
+			}
 		}
 	}
 
@@ -1326,6 +1346,19 @@ namespace Joomla\CMS\MVC\View {
 	if (!class_exists(JsonView::class, false))
 	{
 		class JsonView extends HtmlView
+		{
+		}
+	}
+}
+
+namespace Joomla\CMS\Access\Exception {
+	/**
+	 * The real class is a bare `\RuntimeException` subclass with no behaviour of its own, so this stub
+	 * is a straight copy rather than a simplification.
+	 */
+	if (!class_exists(NotAllowed::class, false))
+	{
+		class NotAllowed extends \RuntimeException
 		{
 		}
 	}

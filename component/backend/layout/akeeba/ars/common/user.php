@@ -59,34 +59,34 @@ $gravatarUrl =
 <?php if ($showGravatar && !$showName && !$showUsername && !$showUserId && !$showEmail): ?>
 	<img src="<?= $gravatarUrl ?>" alt="" class="img-fluid rounded rounded-3">
 <?php else: ?>
-	<div class="d-flex">
+	<div class="d-flex gap-2">
 		<?php if ($showGravatar): ?>
-			<div class="pe-2 pb-1">
-				<img src="<?= $gravatarUrl ?>" alt="" class="img-fluid rounded rounded-3">
+			<div class="">
+				<img src="<?= $gravatarUrl ?>" alt="" class="rounded rounded-3">
 			</div>
 		<?php endif; ?>
 
 		<div>
 			<?php if ($showUsername): ?><strong>
 				<?php if ($showLink): ?>
-					<a href="<?= $link ?>">
-						<?= $name ?>
+					<a href="<?= htmlspecialchars($link, ENT_QUOTES, 'UTF-8') ?>">
+						<?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>
 					</a>
 				<?php else: ?>
-					<?= $name ?>
+					<?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>
 				<?php endif; ?>
 				</strong><?php endif; ?>
 			<?php if ($showUserId): ?><small class="text-muted fst-italic">[ <?= $user_id ?> ]</small><?php endif; ?>
 			<?php if (($showUsername || $showUserId) && ($showUsername || $showEmail)): ?><br /><?php endif; ?>
 			<?php if ($showUsername): ?>
 				<span class="text-success">
-				<?= $username ?>
+				<?= htmlspecialchars($username, ENT_QUOTES, 'UTF-8') ?>
 			</span>
 				<?php if ($showEmail): ?><br /><?php endif; ?>
 			<?php endif; ?>
 			<?php if ($showEmail): ?>
 				<span class="text-muted fst-italic fs-6">
-				<?= $email ?>
+				<?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8') ?>
 			</span>
 			<?php endif; ?>
 		</div>

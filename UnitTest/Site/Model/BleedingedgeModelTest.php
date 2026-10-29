@@ -226,6 +226,27 @@ class BleedingedgeModelTest extends TestCase
 		self::assertDirectoryExists($basePath);
 	}
 
+	public function testEmptyBasePathIsRejectedWithoutError(): void
+	{
+		// realpath('') does NOT return false -- confirmed empirically, it resolves to the process's
+		// current working directory, which is NOT necessarily unsafe on its own. Both real call sites
+		// (removeReleasesByAge()/removeReleasesByCount()) already guard `if (empty($basePath)) return;`
+		// before ever reaching this method, so this only exercises the method in isolation: an
+		// intentionally never-real version name means whatever $realBase resolves to, there is nothing
+		// at "$realBase/$version" to find contained, so this must still safely no-op rather than warn,
+		// fatal, or delete something in whatever directory the test happens to run from.
+		$this->invokePrivate('removeReleaseDirectory', ['', 'e2e-never-a-real-directory-name-' . bin2hex(random_bytes(8))]);
+
+		$this->addToAssertionCount(1); // Reaching here without a warning/error/exception IS the assertion.
+	}
+
+	public function testNonExistentBasePathIsRejectedWithoutError(): void
+	{
+		$this->invokePrivate('removeReleaseDirectory', [$this->sandbox . '/does-not-exist', '1.2.3']);
+
+		$this->addToAssertionCount(1);
+	}
+
 	public function testDeletesALegitimateDirectChildVersion(): void
 	{
 		[$basePath] = $this->makeCategoryDir();

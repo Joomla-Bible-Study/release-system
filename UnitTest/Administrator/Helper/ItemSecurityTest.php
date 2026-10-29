@@ -157,6 +157,57 @@ class ItemSecurityTest extends TestCase
 		$this->assertNull(ItemSecurity::resolveContainedFile($this->root . '/category', 'no-such-file.zip'));
 	}
 
+	/**
+	 * A broader sweep of shapes beyond the individual cases above, all of which must resolve to null
+	 * against the exact same sandbox -- exercising the realpath()-based containment check itself
+	 * (which does not special-case any of these forms) rather than a string blocklist, since that
+	 * check is what actually has to catch each one.
+	 *
+	 * A "./" prefix and an empty double-slash segment are deliberately NOT in this list: confirmed
+	 * empirically, realpath() normalises both away without ever leaving the base directory (e.g.
+	 * 'sub//nested.zip' resolves to the same real file 'sub/nested.zip' does), so
+	 * resolveContainedFile() correctly ACCEPTS them -- they are unusual spellings of a legitimate
+	 * path, not a containment bypass, and asserting null for them would be testing a stricter policy
+	 * this function does not (and does not need to) implement.
+	 */
+	public static function containmentTraversalPayloadProvider(): array
+	{
+		return [
+			'parent traversal to a real file outside the base' => ['../outside/secret.zip'],
+			'deep parent traversal to /etc/passwd'              => ['../../../../../../../../etc/passwd'],
+			'a bare ".." segment'                                => ['..'],
+			'traversal hidden after a legitimate segment'        => ['sub/../../outside/secret.zip'],
+			'backslash-style traversal'                            => ['..\\outside\\secret.zip'],
+			'absolute POSIX path'                                  => ['/etc/passwd'],
+			'absolute Windows path'                                => ['C:/Windows/system.ini'],
+			'absolute Windows path, backslashes'                   => ['C:\\Windows\\system.ini'],
+		];
+	}
+
+	#[DataProvider('containmentTraversalPayloadProvider')]
+	public function testResolveContainedFileRejectsABroaderSweepOfTraversalShapes(string $filename): void
+	{
+		$this->assertNull(ItemSecurity::resolveContainedFile($this->root . '/category', $filename));
+	}
+
+	public function testResolveContainedFileAcceptsADotSlashPrefixSinceItStaysContained(): void
+	{
+		// realpath() normalises './legit.zip' to the same file 'legit.zip' resolves to -- not a
+		// traversal attempt, just an unusual spelling of a path that never leaves the base directory.
+		$this->assertSame(
+			realpath($this->root . '/category/legit.zip'),
+			ItemSecurity::resolveContainedFile($this->root . '/category', './legit.zip')
+		);
+	}
+
+	public function testResolveContainedFileAcceptsADoubleSlashSinceItStaysContained(): void
+	{
+		$this->assertSame(
+			realpath($this->root . '/category/sub/nested.zip'),
+			ItemSecurity::resolveContainedFile($this->root . '/category', 'sub//nested.zip')
+		);
+	}
+
 	public function testFailsSafeOnAnEmptyFilename(): void
 	{
 		$this->assertNull(ItemSecurity::resolveContainedFile($this->root . '/category', ''));

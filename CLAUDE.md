@@ -2,6 +2,13 @@
 
 Akeeba Release System (ARS) — a Joomla package extension for managing software releases and downloads.
 
+## Security
+
+Before any security audit, security review, or `audit-*` skill run — and before reporting any
+finding from one — you MUST read `.claude/security-audit-triage.md` — the actors that are out
+of scope, finding classes already ruled invalid, controls already in place, and how to
+classify hardening versus vulnerabilities.
+
 ## Gotchas
 
 - **Categories are NOT `com_categories`.** ARS has its own `#__ars_categories` table. `ARSPseudoCategory` implements Joomla's `CategoryInterface` purely to bridge custom fields and tags — don't reach for the Joomla category API.
@@ -74,3 +81,28 @@ consumers, so `SOURCE_DIR` and `OUTPUT_DIR` are the same directory for both.
   ignores it when computing the cache key. Clear cache via System → Clear Cache (or the "Clean Cache"
   toolbar button) right after installing, then re-verify the stream output before calling the upgrade
   done.
+
+## Project memory
+
+Project memory lives in `.claude/memory/`, committed with the code, so that it is shared across machines
+and across agentic harnesses. Read the relevant file **before** starting work that matches its trigger:
+
+| Before you… | Read |
+|---|---|
+| Fix a finding during a security-audit remediation session | `.claude/memory/security-remediation.md` |
+| Add, change or translate language strings, or add a language | `.claude/memory/translations.md` |
+| Change the supported PHP/Joomla range, or verify ARS against a Joomla version | `.claude/memory/version-limits.md` |
+
+### Recording new memories
+
+This is the **default and only** place for project memory. Do not write memories for this project to a
+harness's private memory store (such as Claude Code's auto-memory under `~/.claude/projects/`); write
+them here instead:
+
+- Add to the existing topic file when one fits; otherwise create a new kebab-case `.md` file named after
+  the topic, and add a row for it to the table above with a concrete trigger.
+- Plain Markdown, no frontmatter. State the rule, then **Why:** (the reason or incident behind it) and
+  **How to apply:**. Link related files with relative Markdown links.
+- Don't record what the code, Git history or this file already says — update this file instead when the
+  rule belongs here. Remove or correct entries that turn out wrong.
+- These files are committed: no secrets, credentials, customer data or personal details.

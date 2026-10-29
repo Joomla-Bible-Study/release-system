@@ -350,20 +350,47 @@ class Pkg_ArsInstallerScript extends \Joomla\CMS\Installer\InstallerScript
 		$this->dbo = Factory::getContainer()->get(DatabaseInterface::class);
 	}
 
+	/**
+	 * Removes every update_sites row this package's manifest has EVER declared an <updateservers>
+	 * entry for, across its whole history -- not just the oldest one. The manifest currently declares
+	 * none at all (see the comment in build/templates/pkg_ars.xml for why: this fork builds and
+	 * installs its own package and does not want Joomla ever offering Akeeba's official release as an
+	 * update), but removing a declaration from the manifest does not retroactively delete a row a
+	 * PAST version already registered in #__update_sites -- Joomla only adds/updates what the current
+	 * manifest declares, never proactively removes what an earlier one did.
+	 *
+	 * The middle entry matters most: it is plain HTTP, so a site that upgraded through that version
+	 * and is still carrying that registered row has a live, spoofable update source -- a
+	 * network-position attacker could serve a forged feed and have Joomla's installer act on it,
+	 * unauthenticated and with no package-signature check. Cleaning up only the oldest (already-HTTPS)
+	 * entry, as this method used to, left that insecure intermediate URL untouched forever on any site
+	 * that upgraded through it.
+	 */
 	private function removeOldUpdateSites()
 	{
-		$db    = $this->dbo;
-		// Deliberately inline — see the note above.
-		$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
-			->delete($db->qn('#__update_sites'))
-			->where($db->qn('location') . ' = ' . $db->q('https://raw.githubusercontent.com/akeeba/release-system/master/update/pkg_ars_updates.xml'));
-		try
+		$db = $this->dbo;
+
+		$staleLocations = [
+			'https://raw.githubusercontent.com/akeeba/release-system/master/update/pkg_ars_updates.xml',
+			'http://cdn.akeeba.com/updates/ars.xml',
+			'https://cdn.akeeba.com/updates/ars.xml',
+		];
+
+		foreach ($staleLocations as $location)
 		{
-			$db->setQuery($query)->execute();
-		}
-		catch (\Exception $e)
-		{
-			// Do nothing on failure
+			// Deliberately inline — see the note above.
+			$query = (method_exists($db, 'createQuery') ? $db->createQuery() : $db->getQuery(true))
+				->delete($db->qn('#__update_sites'))
+				->where($db->qn('location') . ' = ' . $db->q($location));
+
+			try
+			{
+				$db->setQuery($query)->execute();
+			}
+			catch (\Exception $e)
+			{
+				// Do nothing on failure
+			}
 		}
 	}
 
