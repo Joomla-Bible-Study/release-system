@@ -1,4 +1,8 @@
 <?php die(); ?>
+Akeeba Release System 7.5.3
+================================================================================
+~ CWM: the database now enforces one main Download ID per user. Code that inserted rows directly (an old CWM License Portal download plugin did) could leave a user with several main IDs, which ARS will neither unpublish nor delete; an update migration demotes all but the oldest per user, then a unique guard refuses any second one
+
 Akeeba Release System 7.5.2
 ================================================================================
 ! PHP and Joomla minimum and maximum version compatibility is now enforced

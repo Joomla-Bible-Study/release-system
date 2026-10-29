@@ -22,7 +22,7 @@ dependency; see `cwm-build.config.json` for the package layout), not the upstrea
 ```bash
 composer install
 npm install && npm run build   # only needed after editing component/media/{css,js} sources
-composer package -- --version 7.5.2
+composer package -- --version 7.5.3
 ```
 
 The generated package is under `release/`.

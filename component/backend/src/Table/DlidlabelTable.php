@@ -58,6 +58,28 @@ class DlidlabelTable extends AbstractTable
 		$this->created    = Factory::getDate()->toSql();
 	}
 
+	/**
+	 * The table's columns, minus the `primary_user_id` guard column.
+	 *
+	 * Since 7.5.3 the database enforces one main Download ID per user through a stored generated
+	 * column (`primary_user_id`, user_id only when `primary` = 1) with a UNIQUE index. Joomla's Table
+	 * turns every column into a property and writes them all back on store(), and MySQL refuses any
+	 * value for a generated column — so the column must never become a property here.
+	 *
+	 * @param   bool  $reload  Whether to reload the field list.
+	 *
+	 * @return  array
+	 * @since   7.5.3
+	 */
+	public function getFields($reload = false)
+	{
+		$fields = parent::getFields($reload);
+
+		unset($fields['primary_user_id']);
+
+		return $fields;
+	}
+
 	protected function onBeforeCheck()
 	{
 		$app = Factory::getApplication();
