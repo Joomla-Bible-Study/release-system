@@ -182,7 +182,9 @@ CREATE TABLE IF NOT EXISTS `#__ars_dlidlabels` (
     `modified`         datetime            NULL     DEFAULT NULL,
     `checked_out`      int(11)             NOT NULL DEFAULT '0',
     `checked_out_time` datetime            NULL     DEFAULT NULL,
-    PRIMARY KEY (`id`)
+    `primary_user_id`  bigint(20) unsigned GENERATED ALWAYS AS (IF(`primary` = 1, `user_id`, NULL)) STORED,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `#__ars_dlidlabels_one_primary` (`primary_user_id`)
 ) ENGINE InnoDB DEFAULT CHARSET = utf8mb4 DEFAULT COLLATE = utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO `#__ars_environments` (`id`, `title`, `xmltitle`)

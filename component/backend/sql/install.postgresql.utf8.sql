@@ -192,6 +192,9 @@ CREATE TABLE IF NOT EXISTS "#__ars_dlidlabels"
     PRIMARY KEY ("id")
 );
 
+-- One main Download ID per user, enforced by the database (7.5.3).
+CREATE UNIQUE INDEX IF NOT EXISTS "#__ars_dlidlabels_one_primary" ON "#__ars_dlidlabels" ("user_id") WHERE "primary" = 1;
+
 INSERT INTO "#__ars_environments" ("id", "title", "xmltitle")
 VALUES (1, 'Joomla! 1.5', 'joomla/1.5'),
        (2, 'Joomla! 1.6', 'joomla/1.6'),
