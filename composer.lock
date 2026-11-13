@@ -9,16 +9,16 @@
     "packages-dev": [
         {
             "name": "cwm/build-tools",
-            "version": "v1.37.0",
+            "version": "v1.40.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Joomla-Bible-Study/cwm-build-tools.git",
-                "reference": "95f909f33f65be8d905f0757106bc301d24d1d60"
+                "reference": "955cc464e1519dc9c9355f804c12813d50ea76bd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Joomla-Bible-Study/cwm-build-tools/zipball/95f909f33f65be8d905f0757106bc301d24d1d60",
-                "reference": "95f909f33f65be8d905f0757106bc301d24d1d60",
+                "url": "https://api.github.com/repos/Joomla-Bible-Study/cwm-build-tools/zipball/955cc464e1519dc9c9355f804c12813d50ea76bd",
+                "reference": "955cc464e1519dc9c9355f804c12813d50ea76bd",
                 "shasum": ""
             },
             "require": {
@@ -54,6 +54,10 @@
                 "bin/cwm-install-zip",
                 "bin/cwm-joomla-install",
                 "bin/cwm-joomla-latest",
+                "bin/cwm-site-create",
+                "bin/cwm-site-remove",
+                "bin/cwm-site-reset",
+                "bin/cwm-seed",
                 "bin/cwm-joomla-cms-deps",
                 "bin/cwm-baseline",
                 "bin/cwm-lint-queries",
@@ -126,10 +130,10 @@
                 "release"
             ],
             "support": {
-                "source": "https://github.com/Joomla-Bible-Study/cwm-build-tools/tree/v1.37.0",
+                "source": "https://github.com/Joomla-Bible-Study/cwm-build-tools/tree/v1.40.0",
                 "issues": "https://github.com/Joomla-Bible-Study/cwm-build-tools/issues"
             },
-            "time": "2026-09-25T16:41:40+00:00"
+            "time": "2026-11-13T22:00:22+00:00"
         }
     ],
     "aliases": [],
