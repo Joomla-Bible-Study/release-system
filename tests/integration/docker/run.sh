@@ -133,7 +133,7 @@ export PGID; PGID="$(id -g)"
 [ -n "${PHP_OVERRIDE}" ] && export PHP_VERSION="${PHP_OVERRIDE}"
 
 : "${JOOMLA_VERSION:?JOOMLA_VERSION is not set}"
-: "${JOOMLA_MATRIX:=5.4:8.1,8.5 6.0:8.3,8.5 6.1:8.3,8.5}"
+: "${JOOMLA_MATRIX:=5.4:8.5 6.0:8.5 6.1:8.5}"
 : "${DB_PREFIX:=e2e_}"
 : "${DB_NAME:=arse2e}"
 : "${DB_ROOT_PASSWORD:=root}"
@@ -255,7 +255,7 @@ MIN_PHP_VERSION="$(sed -nE "s/.*\\\$minimumPhp[[:space:]]*=[[:space:]]*'([0-9.]+
 	"${REPO_ROOT}/component/script.ars.php" | head -1)"
 MAX_PHP_VERSION="$(sed -nE "s/.*\\\$maximumPhp[[:space:]]*=[[:space:]]*'([0-9.]+)'.*/\1/p" \
 	"${REPO_ROOT}/component/script.ars.php" | head -1)"
-: "${MIN_PHP_VERSION:=8.3.0}"
+: "${MIN_PHP_VERSION:=8.5.0}"
 : "${MAX_PHP_VERSION:=8.7}"
 
 # Reject a PHP version outside what ARS itself claims to support, before we spend minutes on it.
