@@ -35,7 +35,7 @@ class Pkg_ArsInstallerScript extends \Joomla\CMS\Installer\InstallerScript
 
 	protected $allowDowngrades = true;
 
-	protected $minimumPhp = '8.5.0';
+	protected $minimumPhp = '8.4.0';
 
 	protected $maximumPhp = '8.7';
 

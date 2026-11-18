@@ -29,7 +29,7 @@ and `Toolbar::getInstance()` are still present in 6.1.2) and misses real ones.
 Implemented 2026-09-04, mirroring commit `d3044879` in `akeebabackup` (also rolled out in
 `admintools`, `ats`, `onthos`, `docimport`, `paddle`, `social-magick`).
 `Akeeba\Component\ARS\Administrator\Helper\VersionLimits`
-(`component/backend/src/Helper/VersionLimits.php`) declares min/max PHP (`8.1.0`–`<8.7`) and min/max
+(`component/backend/src/Helper/VersionLimits.php`) declares min/max PHP (`8.4.0`–`<8.7`) and min/max
 Joomla (`5.4.0`–`<6.3`) and is wired in two places:
 
 - `Dispatcher::dispatch()` calls `VersionLimits::throwIfVersionsIncompatible()` — covers the backend,
