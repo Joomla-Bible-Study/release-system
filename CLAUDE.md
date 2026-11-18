@@ -17,15 +17,19 @@ classify hardening versus vulnerabilities.
   query through it rather than calling `createQuery()`/`getQuery(true)` directly. The two copies in
   `component/script.ars.php` are intentional — that file runs before the autoloader exists.
 - **Every schema change needs both dialects.** `component/backend/sql/` ships parallel MySQL and PostgreSQL files; changing one and not the other ships a broken install.
+- **PHP 8.4 is the floor, but the site and development both run 8.5.** ARS requires `>=8.4 <8.7`, so
+  don't use 8.5-only syntax or functions: no pipe operator (`|>`), no `clone()` with properties, no
+  `array_first()` / `array_last()`. Nothing on an 8.5 machine flags them. Run the unit suite on 8.4
+  too; the 8.4 pairs in the e2e matrix (below) exercise the floor end to end.
 - **The e2e matrix pairs Joomla with PHP deliberately.** `JOOMLA_MATRIX` in
   `tests/integration/docker/env.dist` is a list of `JOOMLA:PHP[,PHP...]` pairs, not a cross product.
   The rule: for each supported Joomla version, run the **lowest** and the **highest** PHP that both
   ARS *and* that Joomla version permit, plus any **PHP major-version boundary** that falls inside
   that window. The edges are where incompatibilities live — a version in the middle of a range
   almost never breaks something the edges do not, and each pair costs a full site provision.
-  Today: ARS allows `>=8.5 <8.7`, above every Joomla version's own floor (5.4 requires PHP 8.1+,
-  6.x requires 8.3+), and the newest published `php:*-fpm` image is 8.5, so floor and ceiling
-  coincide. Hence `5.4:8.5 6.0:8.5 6.1:8.5`. As an
+  Today: ARS allows `>=8.4 <8.7`, above every Joomla version's own floor (5.4 requires PHP 8.1+,
+  6.x requires 8.3+), so the lower edge is 8.4 for all of them, and the newest published
+  `php:*-fpm` image is 8.5. Hence `5.4:8.4,8.5 6.0:8.4,8.5 6.1:8.4,8.5`. As an
   illustration of the major-boundary clause: were Joomla 4.4 still supported, it would need
   7.4, 8.0 and 8.2 — the two edges *and* 8.0, because a PHP major jump breaks more than a minor one.
   Recompute the pairs whenever a floor moves or a new PHP is released; `run.sh` enforces both floors

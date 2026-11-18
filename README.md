@@ -14,6 +14,12 @@ If you decide to use this software please keep in mind that making it work with 
 
 Kindly note that we do not provide any support or documentation for this software, be it free or paid. We're all developers here – you and us both. We can figure it out by looking at the source code.
 
+## Requirements
+
+PHP 8.4 or later (below 8.7) and Joomla 5.4 or later (below 6.3). The site this fork runs on uses PHP 8.5, but the
+code has to keep working on 8.4, so it must not use 8.5-only syntax or functions such as the pipe operator (`|>`),
+`clone()` with properties, or `array_first()` / `array_last()`.
+
 ## Build instructions
 
 Packaging is driven by [cwm-build-tools](https://github.com/Joomla-Bible-Study/cwm-build-tools) (a Composer dev
